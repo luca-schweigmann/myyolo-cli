@@ -187,7 +187,7 @@ var capabilities = []Capability{
 		query("member-id", "MitgliedID", PositiveID, true)),
 	cap("member-reha-planner", "members", "Reha planner assignments for one member", http.MethodGet, "/Mitglieder/Anwesenheit/Mitglied_Liste_anwesend_Gesundheitsplaner.asp", Health,
 		query("member-id", "MitgliedID", PositiveID, true)),
-	cap("member-sport-planner", "members", "Sport planner assignments for one member", http.MethodGet, "/Mitglieder/Anwesenheit/Mitglied_Liste_anwesend_Gesundheitsplaner.asp", Personal,
+	cap("member-sport-planner", "members", "Sport planner assignments for one member", http.MethodGet, "/Mitglieder/Anwesenheit/Mitglied_Liste_anwesend_Gesundheitsplaner.asp", Health,
 		query("member-id", "MitgliedID", PositiveID, true), fixedQuery("mode", "sport")),
 	cap("people", "members", "Current people list", http.MethodGet, "/Mitglieder/Personen_Liste.asp", Personal),
 	cap("memberships", "members", "Membership list", http.MethodGet, "/Mitglieder/Vertrag_Liste.asp", Personal),
@@ -418,7 +418,10 @@ func ValidateRequest(request Request) bool {
 		return false
 	}
 	parsed, err := url.Parse(request.Path)
-	if err != nil || parsed.IsAbs() || !ValidateAdminURL(capability.Method, parsed) {
+	if err != nil ||
+		parsed.IsAbs() ||
+		parsed.EscapedPath() != capability.Path ||
+		!matchesQuery(capability, parsed.Query()) {
 		return false
 	}
 	if capability.Method == http.MethodGet {

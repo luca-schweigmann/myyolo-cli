@@ -88,7 +88,7 @@ responses are supported; a binary export fails closed without being stored.
 - `member-reha-history` — health; `--member-id`
 - `member-reha-planner` — health; `--member-id`
 - `member-search` — personal; `--population --search`
-- `member-sport-planner` — personal; `--member-id`
+- `member-sport-planner` — health; `--member-id`
 - `memberships` — personal
 - `notes` — personal
 - `people` — personal

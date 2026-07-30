@@ -44,9 +44,10 @@ var allowed = map[string]map[string]routePolicy{
 	},
 }
 
-// ValidateReadRequest is the final network gate. Only explicitly classified
-// reads are allowed. A POST is not assumed to be a write or read from its verb;
-// the exact observed route must be listed.
+// ValidateReadRequest is the final URL gate. Only explicitly classified reads
+// are allowed. A POST is not assumed to be a write or read from its verb; the
+// exact observed route must be listed. Typed POST bodies are validated by
+// readcatalog.ValidateRequest before the admin client reaches this layer.
 func ValidateReadRequest(method, rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {

@@ -170,6 +170,17 @@ func TestValidateRequestRejectsForgedFormBody(t *testing.T) {
 	}
 }
 
+func TestValidateRequestRejectsPathFromAnotherCapability(t *testing.T) {
+	request, err := Build("attendance-monthly", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Path = "/Excel/Sonstiges/E_Mitglieder_IBAN.asp"
+	if ValidateRequest(request) {
+		t.Fatal("request using another capability path was accepted")
+	}
+}
+
 func TestValidateRequestAcceptsOmittedOptionalFormField(t *testing.T) {
 	request, err := Build("reha-prescription-summary", map[string]string{
 		"from": "2026-07-01",
