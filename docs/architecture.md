@@ -14,14 +14,15 @@ one operator credential profile in the OS keyring
   <=3 requests           <=5 sync / <=10 discovery
   >=1s serial            >=2s serial
           |                   |
-  strict JSON graph      bounded leaf-table parser
+  strict JSON graph      99-route typed read catalogue
+                         bounded leaf-table parser
           |                   |
           +---------+---------+
                     v
           private SQLite database
                     |
-          local-only aggregate reports
-          PII details behind explicit flag
+          local-only reports
+          sensitivity details behind explicit flags
 ```
 
 ## Trust boundaries
@@ -29,20 +30,23 @@ one operator credential profile in the OS keyring
 1. `internal/transport` is the final host/method/path/query gate. A POST is
    never assumed to be a write or read from its verb; every exact route is
    classified.
-2. `internal/secrets` owns one credential envelope and distinct `mysign` and
+2. `internal/readcatalog` is the typed source contract for one-capability
+   collections. It validates dates, IDs, weeks, enums, search length, IK
+   numbers, fixed query values and sensitivity before network access.
+3. `internal/secrets` owns one credential envelope and distinct `mysign` and
    `admin` session envelopes in the platform keyring. Secret values never enter
    logs, configuration files, command-line arguments, or SQLite.
-3. `internal/mysign` parses a strict graph. Missing attendance metrics,
+4. `internal/mysign` parses a strict graph. Missing attendance metrics,
    duplicate identifiers, and unknown references fail closed.
-4. `internal/admin` disables automatic redirects, counts each ASP auth hop,
+5. `internal/admin` disables automatic redirects, counts each ASP auth hop,
    owns an isolated cookie jar, decodes the declared response charset, rejects
-   CAPTCHA/rate-limit/schema anomalies, and parses bounded leaf tables.
-5. `internal/store` imports mySIGN graphs and structured admin observations.
+   CAPTCHA/rate-limit/schema anomalies and non-HTML binary exports, and parses
+   bounded leaf tables.
+6. `internal/store` imports mySIGN graphs and structured admin observations.
    Current admin reports join only the latest observation; older row versions
    remain available as local history.
-6. `internal/output` renders local table, JSON, or CSV. Member names,
-   identifiers, and structured admin rows require an explicit personal-data
-   flag.
+7. `internal/output` renders local table, JSON, or CSV. Personal, health and
+   financial rows require distinct explicit data-scope flags.
 
 ## mySIGN session state machine
 
@@ -80,6 +84,9 @@ POST /Anmelden.asp?vw=
 `http.Client` never follows redirects automatically. Every hop passes the same
 allowlist, delay, and shared budget. A normal admin sync uses at most five
 requests; full discovery uses at most ten, including an expired-session probe.
+A typed collection reads exactly one capability with a maximum of five
+requests. All calls inside one operation are serial and at least two seconds
+apart.
 
 ## Persistence
 
@@ -87,7 +94,7 @@ requests; full discovery uses at most ten, including an expired-session probe.
 - `course_sessions`: dated course occurrences, room and time.
 - `prescriptions`: local prescription counters.
 - `attendance`: member/session/prescription links and attendance flags.
-- `admin_capabilities`: route, sanitized schema metadata and latest observation.
+- `admin_capabilities`: route/capability key, sanitized schema metadata and latest observation.
 - `admin_records`: route/table/row hash, structured values and observation range.
 - `sync_runs`: source fingerprint, status, timestamps and aggregate row counts.
 
@@ -99,11 +106,12 @@ access controls, and encrypted backups.
 
 ## Printing Press
 
-Two sanitized Printing Press specs record the observed mySIGN and admin
-contracts and pass no-network dry runs. Generated clients are not the runtime
-because the generator cannot encode rotating tokens, cookie isolation, manual
-redirect budgets, semantic-read POSTs, PII gates, or fail-closed schema
-boundaries as one generated contract.
+Two sanitized Printing Press specs record the observed mySIGN and representative
+admin contracts. The complete executable admin contract lives in the typed Go
+catalogue and is exportable with `myyolo catalog --format json`. Generated
+clients are not the runtime because the generator cannot encode rotating
+tokens, cookie isolation, manual redirect budgets, semantic-read POSTs,
+sensitivity gates, or fail-closed schema boundaries as one generated contract.
 
 ## Non-goals for version 1
 
@@ -111,6 +119,6 @@ boundaries as one generated contract.
 - no polling, daemon, cloud sync, hosted dashboard, or MCP server;
 - no myYOLO writes, signatures, course edits, documents or billing operations;
 - no CAPTCHA bypass, browser fingerprinting, proxy rotation or stealth behavior;
-- no member-detail crawling or query URLs carrying member IDs;
-- no automatic date-filter form submission in the current discovery contract;
+- no member-detail crawling or fan-out collection;
+- no unclassified query or form submission;
 - no claim that course/Reha windows equal physical facility dwell time.

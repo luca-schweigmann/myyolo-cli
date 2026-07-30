@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luca-schweigmann/myyolo-cli/internal/readcatalog"
 	"github.com/luca-schweigmann/myyolo-cli/internal/secrets"
 	"github.com/luca-schweigmann/myyolo-cli/internal/transport"
 	"golang.org/x/net/html"
@@ -209,6 +211,48 @@ func (client *Client) Discover(
 	return pages, client.captureSession(authenticatedAt), nil
 }
 
+func (client *Client) FetchCapability(
+	ctx context.Context,
+	credentials secrets.Credentials,
+	session secrets.AdminSession,
+	request readcatalog.Request,
+) (Page, secrets.AdminSession, error) {
+	if !readcatalog.ValidateRequest(request) {
+		return Page{}, secrets.AdminSession{}, fmt.Errorf(
+			"blocked invalid read capability request",
+		)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	budget := newBudget(client.fetchBudget)
+	authenticatedAt := session.AuthenticatedAt
+	if len(session.Cookies) > 0 {
+		client.restoreCookies(session)
+		_, err := client.readPage(ctx, "/start_Anwesenheit.asp", budget)
+		if err == nil {
+			page, fetchErr := client.readCapabilityPage(ctx, request, budget)
+			if fetchErr != nil {
+				return Page{}, secrets.AdminSession{}, fetchErr
+			}
+			return page, client.captureSession(authenticatedAt), nil
+		}
+		if !errors.Is(err, ErrSessionExpired) {
+			return Page{}, secrets.AdminSession{}, err
+		}
+	}
+
+	fresh, err := client.login(ctx, credentials, budget)
+	if err != nil {
+		return Page{}, secrets.AdminSession{}, err
+	}
+	page, err := client.readCapabilityPage(ctx, request, budget)
+	if err != nil {
+		return Page{}, secrets.AdminSession{}, err
+	}
+	return page, client.captureSession(fresh.AuthenticatedAt), nil
+}
+
 func (client *Client) login(
 	ctx context.Context,
 	credentials secrets.Credentials,
@@ -347,7 +391,41 @@ func (client *Client) readPage(
 	path string,
 	budget *requestBudget,
 ) (Page, error) {
-	response, err := client.request(ctx, http.MethodGet, path, "", nil, budget)
+	return client.readClassifiedPage(ctx, http.MethodGet, path, "", nil, path, budget)
+}
+
+func (client *Client) readCapabilityPage(
+	ctx context.Context,
+	request readcatalog.Request,
+	budget *requestBudget,
+) (Page, error) {
+	var body io.Reader
+	contentType := ""
+	if request.Capability.Method == http.MethodPost {
+		body = strings.NewReader(request.Body)
+		contentType = "application/x-www-form-urlencoded"
+	}
+	return client.readClassifiedPage(
+		ctx,
+		request.Capability.Method,
+		request.Path,
+		contentType,
+		body,
+		readcatalog.RouteKey(request.Capability.Name),
+		budget,
+	)
+}
+
+func (client *Client) readClassifiedPage(
+	ctx context.Context,
+	method string,
+	path string,
+	contentType string,
+	body io.Reader,
+	routeKey string,
+	budget *requestBudget,
+) (Page, error) {
+	response, err := client.request(ctx, method, path, contentType, body, budget)
 	if err != nil {
 		return Page{}, err
 	}
@@ -368,7 +446,7 @@ func (client *Client) readPage(
 	if response.status != http.StatusOK {
 		return Page{}, fmt.Errorf("myYOLO admin returned HTTP %d", response.status)
 	}
-	page, err := client.parseResponse(path, response)
+	page, err := client.parseResponse(routeKey, response)
 	if err != nil {
 		return Page{}, err
 	}
@@ -445,6 +523,12 @@ func (client *Client) request(
 }
 
 func (client *Client) parseResponse(path string, value response) (Page, error) {
+	if !isHTMLResponse(value.contentType, value.body) {
+		return Page{}, fmt.Errorf(
+			"%w: unsupported non-HTML response",
+			ErrSchemaDrift,
+		)
+	}
 	reader, err := charset.NewReader(bytes.NewReader(value.body), value.contentType)
 	if err != nil {
 		return Page{}, fmt.Errorf("%w: decode response charset", ErrSchemaDrift)
@@ -458,6 +542,32 @@ func (client *Client) parseResponse(path string, value response) (Page, error) {
 		return Page{}, fmt.Errorf("%w: %v", ErrSchemaDrift, err)
 	}
 	return page, nil
+}
+
+func isHTMLResponse(contentType string, body []byte) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err == nil {
+		switch strings.ToLower(mediaType) {
+		case "text/html", "application/xhtml+xml":
+			return true
+		case "application/vnd.ms-excel":
+			return looksLikeHTML(body)
+		}
+	}
+	return looksLikeHTML(body)
+}
+
+func looksLikeHTML(body []byte) bool {
+	body = bytes.TrimPrefix(body, []byte{0xef, 0xbb, 0xbf})
+	if len(body) > 512 {
+		body = body[:512]
+	}
+	prefix := strings.ToLower(strings.TrimSpace(string(body)))
+	return strings.HasPrefix(prefix, "<!doctype html") ||
+		strings.HasPrefix(prefix, "<html") ||
+		strings.Contains(prefix, "<head") ||
+		strings.Contains(prefix, "<body") ||
+		strings.Contains(prefix, "<table")
 }
 
 func (client *Client) restoreCookies(session secrets.AdminSession) {

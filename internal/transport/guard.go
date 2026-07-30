@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/luca-schweigmann/myyolo-cli/internal/readcatalog"
 )
 
 const mySignHost = "sign.azh-myyolo.info"
@@ -71,11 +73,17 @@ func ValidateReadRequest(method, rawURL string) error {
 
 	key := strings.ToUpper(method) + " " + parsed.EscapedPath()
 	policy, ok := routes[key]
+	if ok {
+		if _, allowedQuery := policy.rawQueries[parsed.RawQuery]; allowedQuery && !parsed.ForceQuery {
+			return nil
+		}
+	}
+	if host == adminHost && !parsed.ForceQuery &&
+		readcatalog.ValidateAdminURL(method, parsed) {
+		return nil
+	}
 	if !ok {
 		return fmt.Errorf("blocked unapproved route %s on %s", key, host)
 	}
-	if _, ok := policy.rawQueries[parsed.RawQuery]; !ok || parsed.ForceQuery {
-		return fmt.Errorf("blocked unapproved query string on %s", key)
-	}
-	return nil
+	return fmt.Errorf("blocked unapproved query string on %s", key)
 }

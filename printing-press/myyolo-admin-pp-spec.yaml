@@ -3,7 +3,7 @@ description: |
   Sanitized classic ASP administration contract used by myyolo-cli. The
   production runtime follows redirects manually, keeps cookies in the OS
   keyring, and permits only the exact read routes listed here.
-version: "0.2.0"
+version: "0.3.0"
 base_url: "https://www.azh-myyolo.info"
 spec_source: browser-sniffed
 
@@ -79,5 +79,85 @@ resources:
       missing_reha_signatures:
         method: GET
         path: "/Vertrag_Reha/Unterschrift/Fehlende_Reha_Unterschriften_Liste.asp"
+        response:
+          type: string
+
+  courses:
+    description: Representative course controlling reads.
+    endpoints:
+      definitions:
+        method: GET
+        path: "/Kursplaner/Kurse_Liste.asp"
+        response:
+          type: string
+      history:
+        method: GET
+        path: "/Statistiken/Kursplaner/Kurs_Teilnehmer_anwesend_Kurs.asp"
+        query:
+          - name: KursID
+            flag_name: course-id
+            type: string
+            required: true
+        response:
+          type: string
+
+  members:
+    description: Representative personal reads; production requires an explicit personal-data gate.
+    endpoints:
+      detail:
+        method: GET
+        path: "/Mitglieder/Mitglied_aendern.asp"
+        query:
+          - name: ID
+            flag_name: member-id
+            type: string
+            required: true
+        response:
+          type: string
+      checkins:
+        method: GET
+        path: "/Mitglieder/Anwesenheit/Mitglied_Liste_anwesend.asp"
+        query:
+          - name: MitgliedID
+            flag_name: member-id
+            type: string
+            required: true
+        response:
+          type: string
+
+  prescriptions:
+    description: Representative health-data reads.
+    endpoints:
+      remaining_units:
+        method: POST
+        path: "/Statistiken/Verordnungen/Verordnung_Personen_Rest_Termine.asp"
+        body:
+          - name: Menge
+            flag_name: threshold
+            type: string
+            required: true
+        response:
+          type: string
+
+  compliance:
+    description: Read-only billing-readiness checks; never submits a billing.
+    endpoints:
+      billing_number_mismatches:
+        method: GET
+        path: "/Abrechnung_Reha_Digital/Abrechnungsnummern_Digital_Zeit_VO_pruefen.asp"
+        response:
+          type: string
+
+  financial:
+    description: Representative isolated financial read.
+    endpoints:
+      completed_digital_archive:
+        method: GET
+        path: "/Abrechnung_Reha_Digital/Aktive/Digital_Reha_Aktive_Abgerechnete_Liste.asp"
+        query:
+          - name: IK
+            flag_name: ik
+            type: string
+            required: true
         response:
           type: string

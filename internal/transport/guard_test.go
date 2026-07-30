@@ -29,6 +29,9 @@ func TestReadAllowlist(t *testing.T) {
 		{http.MethodGet, "https://www.azh-myyolo.info/Anwesenheit/Reha_Anwesend_Datum_Liste.asp"},
 		{http.MethodGet, "https://www.azh-myyolo.info/Statistiken/Kursplaner/Kurs_Teilnehmer_anwesend_monatlich.asp"},
 		{http.MethodGet, "https://www.azh-myyolo.info/Vertrag_Reha/Unterschrift/Fehlende_Reha_Unterschriften_Liste.asp"},
+		{http.MethodPost, "https://www.azh-myyolo.info/Statistiken/Auswertungen/auswertung_Auslastung_Studio.asp"},
+		{http.MethodGet, "https://www.azh-myyolo.info/Mitglieder/Mitglied_aendern.asp?ID=1448297"},
+		{http.MethodGet, "https://www.azh-myyolo.info/Kursplaner_WEB/Kursplaner_Teilnehmer_eingabe.asp?Datum=27.07.2026&Kurs=41707&defaultMode=A"},
 	} {
 		if err := ValidateReadRequest(route.method, route.url); err != nil {
 			t.Fatalf("classified admin route %s was blocked: %v", route.url, err)
@@ -53,6 +56,9 @@ func TestWriteAndUnknownRoutesAreBlocked(t *testing.T) {
 		{"admin login missing query", http.MethodPost, "https://www.azh-myyolo.info/Anmelden.asp"},
 		{"admin login changed query", http.MethodPost, "https://www.azh-myyolo.info/Anmelden.asp?vw=1"},
 		{"admin read changed query", http.MethodGet, "https://www.azh-myyolo.info/start_Anwesenheit.asp?month=7"},
+		{"member detail write method", http.MethodPost, "https://www.azh-myyolo.info/Mitglieder/Mitglied_aendern.asp?ID=1448297"},
+		{"member detail changed query", http.MethodGet, "https://www.azh-myyolo.info/Mitglieder/Mitglied_aendern.asp?ID=1448297&edit=1"},
+		{"billing mutation", http.MethodPost, "https://www.azh-myyolo.info/Abrechnung_Reha_Digital/Abrechnung_Reha_Aktive_Startseite_Digital.asp?IK=123456789"},
 		{"alternate port", http.MethodPost, "https://sign.azh-myyolo.info:8443/Home/GetListData"},
 	}
 

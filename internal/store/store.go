@@ -17,6 +17,7 @@ import (
 
 	"github.com/luca-schweigmann/myyolo-cli/internal/admin"
 	"github.com/luca-schweigmann/myyolo-cli/internal/mysign"
+	"github.com/luca-schweigmann/myyolo-cli/internal/readcatalog"
 
 	_ "modernc.org/sqlite"
 )
@@ -705,8 +706,10 @@ func (store *Store) ImportAdminPageAt(
 	page admin.Page,
 	observedAt time.Time,
 ) (result AdminImportResult, returnErr error) {
-	if page.Metadata.Route == "" || page.Metadata.Route[0] != '/' {
-		return AdminImportResult{}, fmt.Errorf("admin page route must be an absolute path")
+	if !validAdminRoute(page.Metadata.Route) {
+		return AdminImportResult{}, fmt.Errorf(
+			"admin page route must be an absolute path or a known capability key",
+		)
 	}
 	if len(page.Metadata.Fingerprint) != 64 {
 		return AdminImportResult{}, fmt.Errorf("admin page schema fingerprint is invalid")
@@ -861,6 +864,14 @@ func (store *Store) ImportAdminPageAt(
 		return AdminImportResult{}, err
 	}
 	return result, nil
+}
+
+func validAdminRoute(route string) bool {
+	if strings.HasPrefix(route, "/") {
+		return true
+	}
+	_, ok := readcatalog.SensitivityForRouteKey(route)
+	return ok
 }
 
 func adminRowValues(headers []string, row []string) map[string]string {
@@ -1472,6 +1483,51 @@ func (store *Store) AdminRecords(
 			&item.LastObservedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan admin record: %w", err)
+		}
+		report = append(report, item)
+	}
+	return report, rows.Err()
+}
+
+func (store *Store) CurrentAdminRecords(
+	ctx context.Context,
+	route string,
+) ([]AdminRecordReport, error) {
+	if !validAdminRoute(route) {
+		return nil, fmt.Errorf("unknown admin route %q", route)
+	}
+	rows, err := store.db.QueryContext(ctx, `
+		SELECT
+			records.route,
+			records.table_index,
+			records.record_hash,
+			records.values_json,
+			records.first_observed_at,
+			records.last_observed_at
+		FROM admin_records AS records
+		INNER JOIN admin_capabilities AS capabilities
+			ON capabilities.route = records.route
+			AND capabilities.last_observed_at = records.last_observed_at
+		WHERE records.route = ?
+		ORDER BY records.table_index, records.record_hash`,
+		route,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query current admin records: %w", err)
+	}
+	defer rows.Close()
+	var report []AdminRecordReport
+	for rows.Next() {
+		var item AdminRecordReport
+		if err := rows.Scan(
+			&item.Route,
+			&item.TableIndex,
+			&item.RecordHash,
+			&item.ValuesJSON,
+			&item.FirstObservedAt,
+			&item.LastObservedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan current admin record: %w", err)
 		}
 		report = append(report, item)
 	}

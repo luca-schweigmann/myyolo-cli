@@ -519,6 +519,76 @@ func TestAdminPageImportIsIdempotentAndSeparateFromMySign(t *testing.T) {
 	}
 }
 
+func TestCapabilityImportAndCurrentRecords(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "myyolo.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	route := "capability:attendance-monthly"
+	firstObserved := time.Date(2026, 7, 30, 8, 0, 0, 0, time.UTC)
+	secondObserved := firstObserved.Add(time.Hour)
+	page := admin.Page{
+		Metadata: admin.PageMetadata{
+			Route:        route,
+			Title:        "Monthly attendance",
+			TableHeaders: [][]string{{"Month", "Attendance"}},
+			TableRows:    []int{2},
+			Fingerprint:  strings.Repeat("b", 64),
+		},
+		Tables: []admin.Table{{
+			Headers: []string{"Month", "Attendance"},
+			Rows: [][]string{
+				{"June", "4"},
+				{"July", "7"},
+			},
+		}},
+	}
+	if _, err := db.ImportAdminPageAt(ctx, page, firstObserved); err != nil {
+		t.Fatal(err)
+	}
+	page.Tables[0].Rows = [][]string{{"July", "8"}}
+	page.Metadata.TableRows = []int{1}
+	if _, err := db.ImportAdminPageAt(ctx, page, secondObserved); err != nil {
+		t.Fatal(err)
+	}
+
+	all, err := db.AdminRecords(ctx, route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("historical records = %d, want 3", len(all))
+	}
+	current, err := db.CurrentAdminRecords(ctx, route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(current) != 1 || !strings.Contains(current[0].ValuesJSON, `"8"`) {
+		t.Fatalf("current records = %#v", current)
+	}
+}
+
+func TestCapabilityImportRejectsUnknownRouteKey(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "myyolo.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	_, err = db.ImportAdminPage(ctx, admin.Page{
+		Metadata: admin.PageMetadata{
+			Route:       "capability:not-in-the-catalog",
+			Fingerprint: strings.Repeat("c", 64),
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "known capability key") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestAdminDomainReportsUseLatestStructuredSnapshot(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, filepath.Join(t.TempDir(), "myyolo.sqlite"))

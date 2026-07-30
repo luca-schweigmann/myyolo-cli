@@ -14,11 +14,15 @@ This project is not affiliated with, endorsed by, or supported by myYOLO, azh or
 |---|---|---:|
 | Validate and securely save both logins | `myyolo auth login --source all` | 4 |
 | Check both sessions, including one autonomous relogin | `myyolo auth check` | mySIGN 1–3, admin 1–5 |
+| Deliberately verify password-only autonomous relogin | `myyolo auth check --force-relogin` | mySIGN 2, admin 2–4 |
 | Show whether a local profile is configured | `myyolo auth status` | 0 |
 | Remove a local credential/session profile | `myyolo auth logout` | 0 |
 | Pull the current mySIGN snapshot into SQLite | `myyolo sync` | 1–3 |
 | Pull the admin attendance landing page | `myyolo sync admin` | 1–5 |
 | Read six allowlisted admin pages | `myyolo discover admin` | 7–10 |
+| Inspect all 99 typed read capabilities locally | `myyolo catalog` | 0 |
+| Collect exactly one selected admin capability | `myyolo collect CAPABILITY` | 2–5 |
+| Read the latest collected capability snapshot | `myyolo report capability CAPABILITY` | 0 |
 | Initialize an empty local database | `myyolo db init` | 0 |
 | Check database integrity and aggregate state | `myyolo db status` | 0 |
 | Check Keychain and database readiness | `myyolo doctor` | 0 |
@@ -34,9 +38,10 @@ This project is not affiliated with, endorsed by, or supported by myYOLO, azh or
 | Analyze monthly course participation | `myyolo report admin-course-months` | 0 |
 | Count missing Reha signatures | `myyolo report admin-missing-signatures` | 0 |
 
-Personal admin/member detail reports exist but require
-`--include-personal-data`. See the complete [capability map](docs/capabilities.md)
-and [data dictionary](docs/data-dictionary.md).
+Personal, health and financial reads are isolated behind separate explicit
+flags. See the complete [read catalogue](docs/read-catalog.md),
+[capability map](docs/capabilities.md) and
+[data dictionary](docs/data-dictionary.md).
 
 ## Safety model
 
@@ -48,13 +53,18 @@ and [data dictionary](docs/data-dictionary.md).
 - Admin redirects are followed manually and budgeted. Sync uses at most five
   requests; discovery uses at most ten. Admin calls are serial and at least two
   seconds apart.
+- `collect` accepts exactly one named capability per run, never an `all` mode,
+  and has a hard five-request ceiling including session probe and relogin.
+  Parameters are type-checked before credentials or network access.
 - HTTP 429, CAPTCHA, unexpected login flow, schema drift, and unclassified
   routes stop immediately. There is no polling, retry loop, browser
   fingerprint imitation, proxy rotation, or stealth behavior.
 - Raw JSON/HTML responses are not retained. SQLite and WAL files use mode
   `0600`.
-- Aggregate reports are default. Member names, IDs, and structured admin rows
-  need `--include-personal-data`.
+- Aggregate reads are default. Personal data needs
+  `--include-personal-data`; Reha/prescription data additionally needs
+  `--include-health-data`; bank/billing data additionally needs
+  `--include-financial-data`.
 
 ## Install
 
@@ -92,16 +102,16 @@ myyolo auth login \
   --partner YOUR_PARTNER_NUMBER \
   --username YOUR_USERNAME
 
-# 2. Pull one mySIGN snapshot and the bounded admin capability set.
+# 2. Pull one mySIGN snapshot and selected admin statistics.
 myyolo sync mysign --profile point
-myyolo discover admin --profile point
+myyolo collect attendance-monthly --profile point
+myyolo collect course-monthly --profile point
 
 # 3. Check readiness and read reports locally without another server request.
 myyolo doctor --profile point
 myyolo report summary
-myyolo report admin-reha-hours
-myyolo report admin-course-months
-myyolo report admin-missing-signatures
+myyolo report capability attendance-monthly
+myyolo report capability course-monthly
 ```
 
 ## Agent-friendly installation
@@ -134,20 +144,28 @@ printf '%s\n' "$AUTHORIZED_MYYOLO_PASSWORD" | ./bin/myyolo auth login \
 ./bin/myyolo doctor --profile point
 ```
 
-After one bounded collection, agents should use local JSON reports:
+Agents can inspect the complete local contract, validate a command with zero
+HTTP requests, perform one bounded collection, then use local JSON reports:
 
 ```bash
 ./bin/myyolo sync mysign --profile point
-./bin/myyolo discover admin --profile point
+./bin/myyolo catalog --format json
+./bin/myyolo collect studio-hourly-load \
+  --from 2026-07-01 --to 2026-07-31 \
+  --profile point --dry-run
+./bin/myyolo collect studio-hourly-load \
+  --from 2026-07-01 --to 2026-07-31 \
+  --profile point
 ./bin/myyolo report summary --format json
-./bin/myyolo report admin-capabilities --format json
+./bin/myyolo report capability studio-hourly-load --format json
 ```
 
 Agents must not expose credentials, cookies, tokens, member data, or databases;
 parallelize source reads; lower the admin delay; continue after rate limits,
-CAPTCHA, auth anomalies, or schema drift; or enable personal reports without
-the explicit `--include-personal-data` gate. The machine-readable scopes are in
-[`docs/capabilities.md`](docs/capabilities.md), metric definitions in
+CAPTCHA, auth anomalies, or schema drift; or enable sensitive reads without
+the corresponding explicit data-scope gates. The machine-readable catalogue is
+available through `myyolo catalog --format json`; the documented scopes are in
+[`docs/read-catalog.md`](docs/read-catalog.md), metric definitions in
 [`docs/data-dictionary.md`](docs/data-dictionary.md), and trust boundaries in
 [`docs/architecture.md`](docs/architecture.md).
 
@@ -214,7 +232,13 @@ read; failure then stops. The repaired session is saved for the next command.
 
 ```bash
 myyolo auth check --profile studio-a --source all
+myyolo auth check --profile studio-a --source admin --force-relogin
 ```
+
+`--force-relogin` ignores the cached session for that check, authenticates once
+from the credential envelope already stored in the keyring, performs one final
+read, and replaces the cache. It never asks for the password and is the
+operator-facing proof that unattended session recovery is ready.
 
 #### `myyolo auth status`
 
@@ -294,6 +318,69 @@ Remote HTTP 429, CAPTCHA, an unexpected redirect, login failure, request-budget
 exhaustion, or schema drift ends the command immediately. Discovery imports
 nothing unless all six remote reads succeeded.
 
+### Typed read catalogue and collection
+
+`catalog` is local-only and lists all 99 classified reads, their group,
+sensitivity, HTTP method, static path and accepted filters:
+
+```bash
+myyolo catalog [--group GROUP] [--format table|json|csv]
+myyolo collect CAPABILITY [filters] \
+  [--profile NAME] [--db PATH] \
+  [--delay 2s] [--request-budget 5] \
+  [--dry-run] [--format table|json|csv]
+```
+
+The six groups are `analytics`, `courses`, `members`, `prescriptions`,
+`compliance`, and `financial`. Use `catalog` instead of guessing paths or form
+fields. `collect` permits one capability only; it has no bulk or wildcard
+mode. Its accepted typed filters are:
+
+| Flag | Validation |
+|---|---|
+| `--from`, `--to`, `--date` | `YYYY-MM-DD`, normalized for the source; ranges max. 366 days |
+| `--year` | 2000–2100 |
+| `--week-from`, `--week-to` | 1–53 |
+| `--threshold` | 0–100000 |
+| `--member-id`, `--course-id`, `--referrer-id` | Positive numeric identifier |
+| `--planner`, `--population` | Capability-specific enum |
+| `--search` | 1–128 characters, no control characters |
+| `--ik` | Exactly nine digits |
+
+Unneeded filters are rejected. `--dry-run` validates the complete command
+without loading credentials, opening SQLite, or making HTTP requests; its
+output deliberately omits supplied values. Every live collection:
+
+1. validates the capability, parameters, data scope, delay and budget locally;
+2. probes a cached session or performs exactly one bounded login;
+3. fetches exactly one capability;
+4. stores the structured observation under `capability:NAME`;
+5. returns only import counts and a schema fingerprint, never row values.
+
+Examples:
+
+```bash
+# Aggregate historical reports
+myyolo collect attendance-monthly --profile point
+myyolo collect studio-hourly-load \
+  --from 2026-07-01 --to 2026-07-31 --profile point
+
+# Person-level and Reha reads require explicit local authorization flags
+myyolo collect member-checkins --member-id 123 \
+  --include-personal-data --profile point
+myyolo collect member-reha-history --member-id 123 \
+  --include-personal-data --include-health-data --profile point
+
+# Financial reads are isolated from normal collection
+myyolo collect digital-billing-complete-archive --ik 123456789 \
+  --include-personal-data --include-financial-data --profile point
+```
+
+Member IDs and filter values above are placeholders. Do not put real
+credentials or health/member data into shell history, issues, logs, or public
+repositories. The complete catalogue is in
+[`docs/read-catalog.md`](docs/read-catalog.md).
+
 ### Database commands
 
 ```bash
@@ -332,6 +419,7 @@ myyolo report REPORT [--db PATH] [--format table|json|csv]
 | `admin-reha-attendance` | Member row | Current Reha attendance details |
 | `admin-missing-signature-members` | Member row | Current missing-signature details |
 | `admin-records` | Route/table row | Generic structured values for current or historic observations |
+| `capability CAPABILITY` | Latest observation for one typed capability | Generic structured row values; sensitivity-gated |
 
 Member and admin-detail reports can expose personal data and therefore require
 the explicit gate:
@@ -340,8 +428,18 @@ the explicit gate:
 myyolo report members --include-personal-data
 myyolo report admin-reha-attendance --include-personal-data
 myyolo report admin-missing-signature-members --include-personal-data
-myyolo report admin-records --include-personal-data [--route EXACT_PATH]
+myyolo report admin-records --route EXACT_PATH --include-personal-data
+myyolo report capability member-checkins \
+  --include-personal-data
+myyolo report capability member-reha-history \
+  --include-personal-data --include-health-data
+myyolo report capability member-bank-export \
+  --include-personal-data --include-financial-data
 ```
+
+An unfiltered `admin-records` report can mix every sensitivity class and
+therefore requires all three data-scope flags. A route classified as health or
+financial requires its matching additional flag.
 
 mySIGN reports accept `--as-of RFC3339`. This makes pending/no-show boundaries
 reproducible. Admin reports always use the newest complete observation for
@@ -389,10 +487,11 @@ mySIGN returns a rolling snapshot rather than a complete historical export. Each
 
 This means history becomes more useful over time while report commands remain remote-request-free. It does not reconstruct periods that were never captured.
 
-Admin discovery retains schema/provenance metadata and distinct structured row
-versions. Domain reports select only rows belonging to the newest complete
-observation, so repeated discovery is idempotent and old row versions do not
-inflate current totals.
+Admin discovery and typed collection retain schema/provenance metadata and
+distinct structured row versions. Capability reports select only rows
+belonging to the newest complete observation, so repeated collection is
+idempotent and old row versions do not inflate the current view. Historical
+versions remain in SQLite for local longitudinal analysis.
 
 ## Multiple logins and databases
 
@@ -427,12 +526,14 @@ Raw HTTP response bodies, passwords, cookies and rotating request tokens are not
 myyolo help
 myyolo version
 myyolo auth login [--profile NAME] [--source mysign|admin|all] --partner NUMBER --username USER [--password-stdin]
-myyolo auth check [--profile NAME] [--source mysign|admin|all]
+myyolo auth check [--profile NAME] [--source mysign|admin|all] [--force-relogin]
 myyolo auth status [--profile NAME]
 myyolo auth logout [--profile NAME]
 myyolo sync [mysign] [--profile NAME] [--db PATH]
 myyolo sync admin [--profile NAME] [--db PATH] [--delay DURATION] [--request-budget 1..5]
 myyolo discover admin [--profile NAME] [--db PATH] [--delay DURATION] [--request-budget 1..10]
+myyolo catalog [--group GROUP] [--format table|json|csv]
+myyolo collect CAPABILITY [typed filters] [--profile NAME] [--db PATH] [--delay DURATION] [--request-budget 1..5] [--dry-run] [data-scope flags]
 myyolo db init [--db PATH]
 myyolo db status [--format table|json|csv] [--db PATH]
 myyolo doctor [--profile NAME] [--db PATH]
@@ -440,7 +541,8 @@ myyolo import mysign --file PATH [--db PATH]
 myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
 myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
 myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
-myyolo report admin-reha-attendance|admin-missing-signature-members|admin-records --include-personal-data [--route EXACT_PATH] [--format table|json|csv] [--db PATH]
+myyolo report capability CAPABILITY [data-scope flags] [--format table|json|csv] [--db PATH]
+myyolo report admin-reha-attendance|admin-missing-signature-members|admin-records --include-personal-data [data-scope flags] [--route EXACT_PATH] [--format table|json|csv] [--db PATH]
 ```
 
 ## Platform behavior
@@ -510,10 +612,11 @@ make build   # local binary in bin/myyolo
 ```
 
 The tests cover strict JSON and HTML parsing, migration/idempotency,
-latest-snapshot selection, fixed-clock no-show boundaries, file permissions,
-personal-data gates, output formats, separate keyring sessions, exact route
-allowlists, delays and budgets, rate-limit/CAPTCHA stops, response-size limits,
-redaction, schema drift, cached sessions and exact one-time re-login sequences.
+latest-snapshot selection, typed capability filters, dry-run redaction,
+personal/health/financial gates, fixed-clock no-show boundaries, file
+permissions, output formats, separate keyring sessions, exact route allowlists,
+delays and budgets, rate-limit/CAPTCHA stops, response-size and content-type
+limits, schema drift, cached sessions and exact one-time re-login sequences.
 
 CI runs the same quality gates plus `govulncheck`. Tagged `v*` pushes use
 GoReleaser to build checksummed archives for macOS, Linux and Windows on AMD64
@@ -542,6 +645,10 @@ invariants are stricter than the generated transport.
 
 ## Scope
 
-Version 1 has no Magicline integration, scheduler, server, cloud upload, MCP or myYOLO write command. Identical names are not a safe cross-system key: names can change and collide. A future integration should use a stable member number or source identifier and needs a separate privacy review.
+This version has no Magicline integration, scheduler, server, cloud upload,
+hosted dashboard, MCP or myYOLO write command. A local dashboard is a separate
+step and should read only SQLite. Identical names are not a safe cross-system
+key: names can change and collide. A future Magicline integration should use a
+stable member number or source identifier and needs a separate privacy review.
 
 See [architecture](docs/architecture.md), [security policy](SECURITY.md) and the [Printing Press contract](printing-press/contract.md).
