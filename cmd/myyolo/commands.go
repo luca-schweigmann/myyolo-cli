@@ -13,7 +13,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/luca-schweigmann/myyolo-cli/internal/admin"
 	"github.com/luca-schweigmann/myyolo-cli/internal/mysign"
 	"github.com/luca-schweigmann/myyolo-cli/internal/output"
 	"github.com/luca-schweigmann/myyolo-cli/internal/secrets"
@@ -28,11 +30,15 @@ func authLogin(ctx context.Context, args []string, stdin io.Reader, stdout io.Wr
 	partner := flags.String("partner", "", "myYOLO partner number")
 	username := flags.String("username", "", "myYOLO username")
 	passwordStdin := flags.Bool("password-stdin", false, "read password from standard input")
+	source := flags.String("source", "all", "authenticate mysign, admin or all")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if err := secrets.ValidateProfile(*profile); err != nil {
 		return err
+	}
+	if *source != "mysign" && *source != "admin" && *source != "all" {
+		return errors.New("--source must be mysign, admin or all")
 	}
 	if *partner == "" || *username == "" {
 		return errors.New("--partner and --username are required")
@@ -46,25 +52,50 @@ func authLogin(ctx context.Context, args []string, stdin io.Reader, stdout io.Wr
 		Username:      *username,
 		Password:      password,
 	}
-	client, err := transport.New(&http.Client{})
-	if err != nil {
-		return err
+	var (
+		mySignSession secrets.Session
+		adminSession  secrets.AdminSession
+	)
+	if *source == "mysign" || *source == "all" {
+		client, err := transport.New(&http.Client{})
+		if err != nil {
+			return err
+		}
+		mySignSession, err = client.Login(ctx, credentials)
+		if err != nil {
+			return err
+		}
 	}
-	session, err := client.Login(ctx, credentials)
-	if err != nil {
-		return err
+	if *source == "admin" || *source == "all" {
+		client, err := admin.New(&http.Client{})
+		if err != nil {
+			return err
+		}
+		adminSession, err = client.Login(ctx, credentials)
+		if err != nil {
+			return err
+		}
 	}
+
 	secretStore := secrets.NewKeyringStore()
 	if err := secretStore.SaveCredentials(*profile, credentials); err != nil {
 		return err
 	}
-	if err := secretStore.SaveSession(*profile, session); err != nil {
-		return err
+	if *source == "mysign" || *source == "all" {
+		if err := secretStore.SaveMySignSession(*profile, mySignSession); err != nil {
+			return err
+		}
+	}
+	if *source == "admin" || *source == "all" {
+		if err := secretStore.SaveAdminSession(*profile, adminSession); err != nil {
+			return err
+		}
 	}
 	return output.Write(stdout, struct {
 		Status  string `json:"status"`
 		Profile string `json:"profile"`
-	}{Status: "authenticated", Profile: *profile}, "json")
+		Source  string `json:"source"`
+	}{Status: "authenticated", Profile: *profile, Source: *source}, "json")
 }
 
 func authStatus(args []string, stdout io.Writer) error {
@@ -75,21 +106,27 @@ func authStatus(args []string, stdout io.Writer) error {
 	}
 	secretStore := secrets.NewKeyringStore()
 	_, credentialErr := secretStore.LoadCredentials(*profile)
-	_, sessionErr := secretStore.LoadSession(*profile)
+	_, mySignSessionErr := secretStore.LoadMySignSession(*profile)
+	_, adminSessionErr := secretStore.LoadAdminSession(*profile)
 	if credentialErr != nil && !secrets.IsNotFound(credentialErr) {
 		return credentialErr
 	}
-	if sessionErr != nil && !secrets.IsNotFound(sessionErr) {
-		return sessionErr
+	if mySignSessionErr != nil && !secrets.IsNotFound(mySignSessionErr) {
+		return mySignSessionErr
+	}
+	if adminSessionErr != nil && !secrets.IsNotFound(adminSessionErr) {
+		return adminSessionErr
 	}
 	return output.Write(stdout, struct {
-		Profile       string `json:"profile"`
-		Configured    bool   `json:"configured"`
-		SessionCached bool   `json:"session_cached"`
+		Profile             string `json:"profile"`
+		Configured          bool   `json:"configured"`
+		MySignSessionCached bool   `json:"mysign_session_cached"`
+		AdminSessionCached  bool   `json:"admin_session_cached"`
 	}{
-		Profile:       *profile,
-		Configured:    credentialErr == nil,
-		SessionCached: sessionErr == nil,
+		Profile:             *profile,
+		Configured:          credentialErr == nil,
+		MySignSessionCached: mySignSessionErr == nil,
+		AdminSessionCached:  adminSessionErr == nil,
 	}, "json")
 }
 
@@ -123,7 +160,7 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 		}
 		return err
 	}
-	session, err := secretStore.LoadSession(*profile)
+	session, err := secretStore.LoadMySignSession(*profile)
 	if err != nil && !secrets.IsNotFound(err) {
 		return err
 	}
@@ -136,7 +173,7 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err := secretStore.SaveSession(*profile, nextSession); err != nil {
+	if err := secretStore.SaveMySignSession(*profile, nextSession); err != nil {
 		return err
 	}
 	data, err := json.Marshal(snapshot)
@@ -156,6 +193,210 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 	return output.Write(stdout, result, "json")
 }
 
+func syncAdmin(ctx context.Context, args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("sync admin", flag.ContinueOnError)
+	profile := flags.String("profile", "default", "credential profile")
+	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
+	delay := flags.Duration("delay", admin.DefaultDelay, "minimum delay between admin requests")
+	requestBudget := flags.Int(
+		"request-budget",
+		admin.DefaultFetchBudget,
+		"maximum requests including login and relogin",
+	)
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *delay < admin.DefaultDelay {
+		return fmt.Errorf("--delay must be at least %s", admin.DefaultDelay)
+	}
+	if *requestBudget < 1 || *requestBudget > admin.DefaultFetchBudget {
+		return fmt.Errorf(
+			"--request-budget must be between 1 and %d for sync admin",
+			admin.DefaultFetchBudget,
+		)
+	}
+	secretStore := secrets.NewKeyringStore()
+	credentials, err := secretStore.LoadCredentials(*profile)
+	if err != nil {
+		if secrets.IsNotFound(err) {
+			return fmt.Errorf("profile %q is not configured; run myyolo auth login", *profile)
+		}
+		return err
+	}
+	session, err := secretStore.LoadAdminSession(*profile)
+	if err != nil && !secrets.IsNotFound(err) {
+		return err
+	}
+	client, err := admin.New(
+		&http.Client{},
+		admin.WithDelay(*delay),
+		admin.WithRequestBudget(*requestBudget),
+	)
+	if err != nil {
+		return err
+	}
+	page, nextSession, err := client.FetchAttendanceHome(ctx, credentials, session)
+	if err != nil {
+		return err
+	}
+	if err := secretStore.SaveAdminSession(*profile, nextSession); err != nil {
+		return err
+	}
+	db, err := store.Open(ctx, *dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	result, err := db.ImportAdminPage(ctx, page)
+	if err != nil {
+		return err
+	}
+	return output.Write(stdout, result, "json")
+}
+
+func discoverAdmin(ctx context.Context, args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("discover admin", flag.ContinueOnError)
+	profile := flags.String("profile", "default", "credential profile")
+	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
+	delay := flags.Duration("delay", admin.DefaultDelay, "minimum delay between admin requests")
+	requestBudget := flags.Int(
+		"request-budget",
+		admin.MaxRequestBudget,
+		"maximum requests including login and relogin",
+	)
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *delay < admin.DefaultDelay {
+		return fmt.Errorf("--delay must be at least %s", admin.DefaultDelay)
+	}
+	if *requestBudget < 1 || *requestBudget > admin.MaxRequestBudget {
+		return fmt.Errorf(
+			"--request-budget must be between 1 and %d for discover admin",
+			admin.MaxRequestBudget,
+		)
+	}
+	secretStore := secrets.NewKeyringStore()
+	credentials, err := secretStore.LoadCredentials(*profile)
+	if err != nil {
+		if secrets.IsNotFound(err) {
+			return fmt.Errorf("profile %q is not configured; run myyolo auth login", *profile)
+		}
+		return err
+	}
+	session, err := secretStore.LoadAdminSession(*profile)
+	if err != nil && !secrets.IsNotFound(err) {
+		return err
+	}
+	client, err := admin.New(
+		&http.Client{},
+		admin.WithDelay(*delay),
+		admin.WithRequestBudget(*requestBudget),
+	)
+	if err != nil {
+		return err
+	}
+	pages, nextSession, err := client.Discover(ctx, credentials, session)
+	if err != nil {
+		return err
+	}
+	if err := secretStore.SaveAdminSession(*profile, nextSession); err != nil {
+		return err
+	}
+	db, err := store.Open(ctx, *dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	result := struct {
+		Pages   int                       `json:"pages"`
+		Records int                       `json:"records"`
+		Imports []store.AdminImportResult `json:"imports"`
+	}{Pages: len(pages)}
+	for _, page := range pages {
+		imported, importErr := db.ImportAdminPage(ctx, page)
+		if importErr != nil {
+			return importErr
+		}
+		result.Records += imported.Records
+		result.Imports = append(result.Imports, imported)
+	}
+	return output.Write(stdout, result, "json")
+}
+
+func authCheck(ctx context.Context, args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("auth check", flag.ContinueOnError)
+	profile := flags.String("profile", "default", "credential profile")
+	source := flags.String("source", "all", "check mysign, admin or all")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *source != "mysign" && *source != "admin" && *source != "all" {
+		return errors.New("--source must be mysign, admin or all")
+	}
+	secretStore := secrets.NewKeyringStore()
+	credentials, err := secretStore.LoadCredentials(*profile)
+	if err != nil {
+		if secrets.IsNotFound(err) {
+			return fmt.Errorf("profile %q is not configured; run myyolo auth login", *profile)
+		}
+		return err
+	}
+	result := struct {
+		Profile       string `json:"profile"`
+		MySign        string `json:"mysign,omitempty"`
+		Admin         string `json:"admin,omitempty"`
+		MySignMembers int    `json:"mysign_members,omitempty"`
+		AdminTables   int    `json:"admin_tables,omitempty"`
+		AdminRecords  int    `json:"admin_records,omitempty"`
+		AdminSchema   string `json:"admin_schema_fingerprint,omitempty"`
+	}{Profile: *profile}
+
+	if *source == "mysign" || *source == "all" {
+		session, loadErr := secretStore.LoadMySignSession(*profile)
+		if loadErr != nil && !secrets.IsNotFound(loadErr) {
+			return loadErr
+		}
+		client, clientErr := transport.New(&http.Client{})
+		if clientErr != nil {
+			return clientErr
+		}
+		snapshot, nextSession, fetchErr := client.Fetch(ctx, credentials, session)
+		if fetchErr != nil {
+			return fetchErr
+		}
+		if saveErr := secretStore.SaveMySignSession(*profile, nextSession); saveErr != nil {
+			return saveErr
+		}
+		result.MySign = "ok"
+		result.MySignMembers = len(snapshot.Members)
+	}
+	if *source == "admin" || *source == "all" {
+		session, loadErr := secretStore.LoadAdminSession(*profile)
+		if loadErr != nil && !secrets.IsNotFound(loadErr) {
+			return loadErr
+		}
+		client, clientErr := admin.New(&http.Client{})
+		if clientErr != nil {
+			return clientErr
+		}
+		page, nextSession, fetchErr := client.FetchAttendanceHome(ctx, credentials, session)
+		if fetchErr != nil {
+			return fetchErr
+		}
+		if saveErr := secretStore.SaveAdminSession(*profile, nextSession); saveErr != nil {
+			return saveErr
+		}
+		result.Admin = "ok"
+		result.AdminTables = len(page.Tables)
+		for _, table := range page.Tables {
+			result.AdminRecords += len(table.Rows)
+		}
+		result.AdminSchema = page.Metadata.Fingerprint
+	}
+	return output.Write(stdout, result, "json")
+}
+
 func initDB(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("db init", flag.ContinueOnError)
 	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
@@ -171,6 +412,67 @@ func initDB(ctx context.Context, args []string, stdout io.Writer) error {
 		Status   string `json:"status"`
 		Database string `json:"database"`
 	}{Status: "ready", Database: *dbPath}, "json")
+}
+
+func dbStatus(ctx context.Context, args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("db status", flag.ContinueOnError)
+	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
+	format := flags.String("format", "json", "table, json or csv")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	db, err := store.Open(ctx, *dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	status, err := db.Status(ctx)
+	if err != nil {
+		return err
+	}
+	return output.Write(stdout, status, *format)
+}
+
+func doctor(ctx context.Context, args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	profile := flags.String("profile", "default", "credential profile")
+	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	secretStore := secrets.NewKeyringStore()
+	_, credentialErr := secretStore.LoadCredentials(*profile)
+	_, mySignSessionErr := secretStore.LoadMySignSession(*profile)
+	_, adminSessionErr := secretStore.LoadAdminSession(*profile)
+	for _, err := range []error{credentialErr, mySignSessionErr, adminSessionErr} {
+		if err != nil && !secrets.IsNotFound(err) {
+			return err
+		}
+	}
+	db, err := store.Open(ctx, *dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	database, err := db.Status(ctx)
+	if err != nil {
+		return err
+	}
+	return output.Write(stdout, struct {
+		Status              string               `json:"status"`
+		Profile             string               `json:"profile"`
+		Credentials         bool                 `json:"credentials_configured"`
+		MySignSessionCached bool                 `json:"mysign_session_cached"`
+		AdminSessionCached  bool                 `json:"admin_session_cached"`
+		Database            store.DatabaseStatus `json:"database"`
+	}{
+		Status:              "ok",
+		Profile:             *profile,
+		Credentials:         credentialErr == nil,
+		MySignSessionCached: mySignSessionErr == nil,
+		AdminSessionCached:  adminSessionErr == nil,
+		Database:            database,
+	}, "json")
 }
 
 func importMySign(ctx context.Context, args []string, stdout io.Writer) error {
@@ -208,6 +510,8 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 	flags := flag.NewFlagSet("report "+reportName, flag.ContinueOnError)
 	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
 	format := flags.String("format", "table", "table, json or csv")
+	asOfValue := flags.String("as-of", "", "RFC3339 evaluation time (default: now)")
+	route := flags.String("route", "", "limit admin records to one exact route")
 	includePersonalData := flags.Bool(
 		"include-personal-data",
 		false,
@@ -221,24 +525,54 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 		return err
 	}
 	defer db.Close()
+	asOf := time.Now()
+	if *asOfValue != "" {
+		asOf, err = time.Parse(time.RFC3339, *asOfValue)
+		if err != nil {
+			return fmt.Errorf("--as-of must be RFC3339: %w", err)
+		}
+	}
 
 	var report any
 	switch reportName {
 	case "summary":
-		report, err = db.Summary(ctx)
+		report, err = db.SummaryAt(ctx, asOf)
 	case "courses":
-		report, err = db.Courses(ctx)
+		report, err = db.CoursesAt(ctx, asOf)
 	case "days":
-		report, err = db.Days(ctx)
+		report, err = db.DaysAt(ctx, asOf)
 	case "hours":
-		report, err = db.Hours(ctx)
+		report, err = db.HoursAt(ctx, asOf)
 	case "sessions":
-		report, err = db.Sessions(ctx)
+		report, err = db.SessionsAt(ctx, asOf)
 	case "members":
 		if !*includePersonalData {
 			return errors.New("member report requires --include-personal-data")
 		}
-		report, err = db.Members(ctx)
+		report, err = db.MembersAt(ctx, asOf)
+	case "admin-capabilities":
+		report, err = db.AdminCapabilities(ctx)
+	case "admin-reha-hours":
+		report, err = db.AdminRehaHours(ctx)
+	case "admin-course-months":
+		report, err = db.AdminCourseMonths(ctx)
+	case "admin-missing-signatures":
+		report, err = db.AdminMissingSignatures(ctx)
+	case "admin-reha-attendance":
+		if !*includePersonalData {
+			return errors.New("admin Reha attendance report requires --include-personal-data")
+		}
+		report, err = db.AdminRehaAttendanceDetails(ctx)
+	case "admin-missing-signature-members":
+		if !*includePersonalData {
+			return errors.New("admin missing-signature member report requires --include-personal-data")
+		}
+		report, err = db.AdminMissingSignatureDetails(ctx)
+	case "admin-records":
+		if !*includePersonalData {
+			return errors.New("admin record report requires --include-personal-data")
+		}
+		report, err = db.AdminRecords(ctx, *route)
 	default:
 		return fmt.Errorf("unknown report %q", reportName)
 	}

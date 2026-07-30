@@ -35,12 +35,27 @@ func writeCSV(writer io.Writer, value any) error {
 		return err
 	}
 	for _, row := range rows {
+		for index := range row {
+			row[index] = sanitizeCSVCell(row[index])
+		}
 		if err := csvWriter.Write(row); err != nil {
 			return err
 		}
 	}
 	csvWriter.Flush()
 	return csvWriter.Error()
+}
+
+func sanitizeCSVCell(value string) string {
+	if value == "" {
+		return value
+	}
+	switch value[0] {
+	case '=', '+', '-', '@', '\t', '\r', '\n':
+		return "'" + value
+	default:
+		return value
+	}
 }
 
 func writeTable(writer io.Writer, value any) error {

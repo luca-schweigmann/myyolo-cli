@@ -1,32 +1,50 @@
 # Architecture
 
-The CLI turns one bounded, authorized snapshot request into durable local history and runs all analytics against that history.
+The CLI turns bounded, authorized reads from two related systems into durable
+local history and runs all analytics against that history.
 
 ```text
-mySIGN
-  | exact allowlist, serial requests, request budget
-  v
-authenticated transport -- OS keyring (credentials + cached session)
-  | parsed snapshot
-  v
-transactional collector
-  | normalized rows
-  v
-private SQLite database
-  |
-  +-- aggregate reports: summary, courses, days, hours, sessions
-  +-- explicit PII report: members
+one operator credential profile in the OS keyring
+                    |
+          +---------+---------+
+          |                   |
+          v                   v
+  mySIGN JSON client     classic ASP admin client
+  rotating token         isolated cookie jar
+  <=3 requests           <=5 sync / <=10 discovery
+  >=1s serial            >=2s serial
+          |                   |
+  strict JSON graph      bounded leaf-table parser
+          |                   |
+          +---------+---------+
+                    v
+          private SQLite database
+                    |
+          local-only aggregate reports
+          PII details behind explicit flag
 ```
 
 ## Trust boundaries
 
-1. `internal/transport` owns the only network client. It accepts only HTTPS, the exact production hostname, no query string, the two approved POST paths, and same-host HTTPS redirects.
-2. `internal/secrets` owns credential profiles and cached sessions in the platform keyring. Secret values never enter logs, configuration files, command-line arguments or SQLite.
-3. `internal/mysign` parses a response into a strict graph. Missing attendance metrics, duplicate identifiers and unknown references fail closed.
-4. `internal/store` imports a complete snapshot transactionally. Re-importing the same source identifiers updates rows instead of duplicating them.
-5. `internal/output` renders local table, JSON or CSV output. The CLI guards member names and identifiers behind an explicit personal-data flag.
+1. `internal/transport` is the final host/method/path/query gate. A POST is
+   never assumed to be a write or read from its verb; every exact route is
+   classified.
+2. `internal/secrets` owns one credential envelope and distinct `mysign` and
+   `admin` session envelopes in the platform keyring. Secret values never enter
+   logs, configuration files, command-line arguments, or SQLite.
+3. `internal/mysign` parses a strict graph. Missing attendance metrics,
+   duplicate identifiers, and unknown references fail closed.
+4. `internal/admin` disables automatic redirects, counts each ASP auth hop,
+   owns an isolated cookie jar, decodes the declared response charset, rejects
+   CAPTCHA/rate-limit/schema anomalies, and parses bounded leaf tables.
+5. `internal/store` imports mySIGN graphs and structured admin observations.
+   Current admin reports join only the latest observation; older row versions
+   remain available as local history.
+6. `internal/output` renders local table, JSON, or CSV. Member names,
+   identifiers, and structured admin rows require an explicit personal-data
+   flag.
 
-## Session state machine
+## mySIGN session state machine
 
 ```text
 cached session?
@@ -39,24 +57,60 @@ cached session?
 
 There is no generic retry loop. A second failed read never causes another login. Concurrent callers in one process are serialized. The CLI does not schedule itself; users or an external scheduler control frequency.
 
+## Admin session state machine
+
+```text
+cached admin cookies?
+  +-- yes -> exact session probe
+  |          +-- success -> read requested pages
+  |          +-- redirect to observed unauthenticated landing
+  |                        -> login once -> read once
+  |          +-- any other result -> stop
+  +-- no  -> login once -> read once
+```
+
+The login flow is counted explicitly:
+
+```text
+POST /Anmelden.asp?vw=
+  -> GET /LoginHandler.asp
+  -> GET /Start.asp (or observed lowercase alias)
+```
+
+`http.Client` never follows redirects automatically. Every hop passes the same
+allowlist, delay, and shared budget. A normal admin sync uses at most five
+requests; full discovery uses at most ten, including an expired-session probe.
+
 ## Persistence
 
-- `members`: source ID, member number and local display identity.
+- `members`: source namespace, source ID, member number, local display identity.
 - `course_sessions`: dated course occurrences, room and time.
 - `prescriptions`: local prescription counters.
 - `attendance`: member/session/prescription links and attendance flags.
-- `sync_runs`: payload fingerprint, status, timestamps and row counts.
+- `admin_capabilities`: route, sanitized schema metadata and latest observation.
+- `admin_records`: route/table/row hash, structured values and observation range.
+- `sync_runs`: source fingerprint, status, timestamps and aggregate row counts.
 
-The source currently exposes a rolling snapshot. Rows are retained locally when they later disappear from that window, building history without remote backfills. SQLite and WAL files are mode `0600`; operators should also use full-disk encryption, host access controls and encrypted backups.
+mySIGN exposes a rolling snapshot. Rows are retained locally when they later
+disappear from that window. Admin row hashes preserve changed/removed versions
+while current reports filter to the latest capability observation. SQLite and
+WAL files are mode `0600`; operators should also use full-disk encryption, host
+access controls, and encrypted backups.
 
 ## Printing Press
 
-The sanitized Printing Press spec records the observed remote contract and passes a no-network dry run. The generated client is not the runtime because the current generator cannot encode the semantic-read POST, keyring handling, request budget, exact-one-relogin behavior and fail-closed schema boundary as one generated contract. The hand-written transport is smaller and directly tests those invariants.
+Two sanitized Printing Press specs record the observed mySIGN and admin
+contracts and pass no-network dry runs. Generated clients are not the runtime
+because the generator cannot encode rotating tokens, cookie isolation, manual
+redirect budgets, semantic-read POSTs, PII gates, or fail-closed schema
+boundaries as one generated contract.
 
 ## Non-goals for version 1
 
 - no Magicline integration or name-based cross-system matching;
-- no polling, daemon, cloud sync, hosted dashboard or MCP server;
+- no polling, daemon, cloud sync, hosted dashboard, or MCP server;
 - no myYOLO writes, signatures, course edits, documents or billing operations;
 - no CAPTCHA bypass, browser fingerprinting, proxy rotation or stealth behavior;
-- no claim that course windows equal physical facility dwell time.
+- no member-detail crawling or query URLs carrying member IDs;
+- no automatic date-filter form submission in the current discovery contract;
+- no claim that course/Reha windows equal physical facility dwell time.

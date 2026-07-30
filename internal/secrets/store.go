@@ -29,6 +29,11 @@ type Session struct {
 	Cookies          []Cookie `json:"cookies,omitempty"`
 }
 
+type AdminSession struct {
+	Cookies         []Cookie `json:"cookies"`
+	AuthenticatedAt string   `json:"authenticated_at,omitempty"`
+}
+
 type Backend interface {
 	Get(service, user string) (string, error)
 	Set(service, user, password string) error
@@ -109,24 +114,78 @@ func ValidateCredentials(credentials Credentials) error {
 }
 
 func (store *Store) SaveSession(profile string, session Session) error {
+	return store.SaveMySignSession(profile, session)
+}
+
+func (store *Store) SaveMySignSession(profile string, session Session) error {
 	if err := ValidateProfile(profile); err != nil {
 		return err
 	}
 	if session.NextRequestToken == "" {
 		return errors.New("session token is required")
 	}
-	return store.save(account(profile, "session"), session)
+	return store.save(account(profile, "session/mysign"), session)
 }
 
 func (store *Store) LoadSession(profile string) (Session, error) {
+	return store.LoadMySignSession(profile)
+}
+
+func (store *Store) LoadMySignSession(profile string) (Session, error) {
 	if err := ValidateProfile(profile); err != nil {
 		return Session{}, err
 	}
 	var session Session
-	if err := store.load(account(profile, "session"), &session); err != nil {
-		return Session{}, err
+	if err := store.load(account(profile, "session/mysign"), &session); err != nil {
+		if !IsNotFound(err) {
+			return Session{}, err
+		}
+		// v0.1 stored the mySIGN session under an unscoped legacy key.
+		// Loading it is safe because the legacy CLI had no second source.
+		if legacyErr := store.load(account(profile, "session"), &session); legacyErr != nil {
+			return Session{}, legacyErr
+		}
 	}
 	return session, nil
+}
+
+func (store *Store) SaveAdminSession(profile string, session AdminSession) error {
+	if err := ValidateProfile(profile); err != nil {
+		return err
+	}
+	if err := ValidateAdminSession(session); err != nil {
+		return err
+	}
+	return store.save(account(profile, "session/admin"), session)
+}
+
+func (store *Store) LoadAdminSession(profile string) (AdminSession, error) {
+	if err := ValidateProfile(profile); err != nil {
+		return AdminSession{}, err
+	}
+	var session AdminSession
+	if err := store.load(account(profile, "session/admin"), &session); err != nil {
+		return AdminSession{}, err
+	}
+	if err := ValidateAdminSession(session); err != nil {
+		return AdminSession{}, fmt.Errorf("stored admin session is invalid: %w", err)
+	}
+	return session, nil
+}
+
+func ValidateAdminSession(session AdminSession) error {
+	if len(session.Cookies) == 0 {
+		return errors.New("admin session cookies are required")
+	}
+	for _, cookie := range session.Cookies {
+		if cookie.Name == "" || cookie.Value == "" {
+			return errors.New("admin session contains an empty cookie")
+		}
+		if len(cookie.Name) > 256 || len(cookie.Value) > 8192 {
+			return errors.New("admin session cookie exceeds size limit")
+		}
+	}
+	return nil
 }
 
 func (store *Store) DeleteProfile(profile string) error {
@@ -134,7 +193,12 @@ func (store *Store) DeleteProfile(profile string) error {
 		return err
 	}
 	var errs []error
-	for _, kind := range []string{"credentials", "session"} {
+	for _, kind := range []string{
+		"credentials",
+		"session",
+		"session/mysign",
+		"session/admin",
+	} {
 		err := store.backend.Delete(serviceName, account(profile, kind))
 		if err != nil && !errors.Is(err, keyring.ErrNotFound) {
 			errs = append(errs, err)

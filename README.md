@@ -1,6 +1,10 @@
 # myyolo-cli
 
-An unofficial, read-only CLI for locally collecting and analyzing mySIGN data from myYOLO. It authenticates with an account you are authorized to use, stores credentials and its cached session in the operating-system keyring, imports the rolling snapshot into private SQLite, and reports from local history.
+An unofficial, read-only CLI for locally collecting and analyzing data from
+mySIGN and the classic myYOLO administration system. One authorized credential
+profile can serve both systems, while their rotating-token and ASP-cookie
+sessions remain isolated in the operating-system keyring. Remote reads are
+small and serial; reports run from private local SQLite.
 
 This project is not affiliated with, endorsed by, or supported by myYOLO, azh or NOVENTI. Use it only with explicit authorization and under the agreement applicable to your account.
 
@@ -8,11 +12,16 @@ This project is not affiliated with, endorsed by, or supported by myYOLO, azh or
 
 | Capability | Command | Remote requests |
 |---|---|---:|
-| Validate and securely save a login | `myyolo auth login` | 1 |
+| Validate and securely save both logins | `myyolo auth login --source all` | 4 |
+| Check both sessions, including one autonomous relogin | `myyolo auth check` | mySIGN 1–3, admin 1–5 |
 | Show whether a local profile is configured | `myyolo auth status` | 0 |
 | Remove a local credential/session profile | `myyolo auth logout` | 0 |
 | Pull the current mySIGN snapshot into SQLite | `myyolo sync` | 1–3 |
+| Pull the admin attendance landing page | `myyolo sync admin` | 1–5 |
+| Read six allowlisted admin pages | `myyolo discover admin` | 7–10 |
 | Initialize an empty local database | `myyolo db init` | 0 |
+| Check database integrity and aggregate state | `myyolo db status` | 0 |
+| Check Keychain and database readiness | `myyolo doctor` | 0 |
 | Import a local snapshot for offline use | `myyolo import mysign` | 0 |
 | Show overall collection and attendance counts | `myyolo report summary` | 0 |
 | Analyze attendance by course | `myyolo report courses` | 0 |
@@ -20,19 +29,32 @@ This project is not affiliated with, endorsed by, or supported by myYOLO, azh or
 | Analyze attendance by starting hour | `myyolo report hours` | 0 |
 | Analyze individual course sessions | `myyolo report sessions` | 0 |
 | Analyze participation per member | `myyolo report members` | 0 |
+| Inspect collected admin route/schema metadata | `myyolo report admin-capabilities` | 0 |
+| Analyze Reha time windows and duration | `myyolo report admin-reha-hours` | 0 |
+| Analyze monthly course participation | `myyolo report admin-course-months` | 0 |
+| Count missing Reha signatures | `myyolo report admin-missing-signatures` | 0 |
 
-The snapshot currently includes course sessions, course/member attendance
-relationships, short member records and prescription summaries. The CLI keeps
-source identifiers intact and builds history over repeated syncs.
+Personal admin/member detail reports exist but require
+`--include-personal-data`. See the complete [capability map](docs/capabilities.md)
+and [data dictionary](docs/data-dictionary.md).
 
 ## Safety model
 
-- Only `POST /Home/LoginUser` and the semantically read-only `POST /Home/GetListData` are allowed; all other routes are blocked.
+- Every request must match an exact HTTPS host, method, path, and classified
+  query. Unknown routes and query strings are blocked.
 - One sync uses one request with a working cached session.
-- An expired session causes exactly one login and one retry: three requests max.
-- Requests are serial with a fixed one-second gap. There is no polling, browser fingerprint imitation, proxy rotation or CAPTCHA bypass.
-- Raw responses are not retained. SQLite and WAL files use mode `0600`.
-- Aggregate reports are default. Member output needs `--include-personal-data`.
+- An expired mySIGN session causes exactly one login and final read: three
+  requests maximum.
+- Admin redirects are followed manually and budgeted. Sync uses at most five
+  requests; discovery uses at most ten. Admin calls are serial and at least two
+  seconds apart.
+- HTTP 429, CAPTCHA, unexpected login flow, schema drift, and unclassified
+  routes stop immediately. There is no polling, retry loop, browser
+  fingerprint imitation, proxy rotation, or stealth behavior.
+- Raw JSON/HTML responses are not retained. SQLite and WAL files use mode
+  `0600`.
+- Aggregate reports are default. Member names, IDs, and structured admin rows
+  need `--include-personal-data`.
 
 ## Install
 
@@ -63,43 +85,103 @@ The binary is written to `bin/myyolo`.
 ## Quick start
 
 ```bash
-# 1. Authenticate once. The password is prompted securely.
+# 1. Authenticate both systems once. The password is prompted securely.
 myyolo auth login \
-  --profile default \
+  --profile point \
+  --source all \
   --partner YOUR_PARTNER_NUMBER \
   --username YOUR_USERNAME
 
-# 2. Pull one snapshot into the default local database.
-myyolo sync --profile default
+# 2. Pull one mySIGN snapshot and the bounded admin capability set.
+myyolo sync mysign --profile point
+myyolo discover admin --profile point
 
-# 3. Read reports locally without another server request.
+# 3. Check readiness and read reports locally without another server request.
+myyolo doctor --profile point
 myyolo report summary
-myyolo report courses
-myyolo report days
+myyolo report admin-reha-hours
+myyolo report admin-course-months
+myyolo report admin-missing-signatures
 ```
+
+## Agent-friendly installation
+
+Authorized coding agents can install, configure, verify, and run the CLI
+without source changes or passwords in process arguments. They need Go 1.26.5,
+an operating-system keyring, authorized myYOLO credentials, and a private local
+directory for SQLite and report exports.
+
+```bash
+git clone https://github.com/luca-schweigmann/myyolo-cli.git
+cd myyolo-cli
+make check
+make build
+./bin/myyolo version
+```
+
+The non-interactive authentication path consumes the password from standard
+input:
+
+```bash
+printf '%s\n' "$AUTHORIZED_MYYOLO_PASSWORD" | ./bin/myyolo auth login \
+  --profile point \
+  --source all \
+  --partner "$AUTHORIZED_MYYOLO_PARTNER" \
+  --username "$AUTHORIZED_MYYOLO_USERNAME" \
+  --password-stdin
+
+./bin/myyolo auth check --profile point --source all
+./bin/myyolo doctor --profile point
+```
+
+After one bounded collection, agents should use local JSON reports:
+
+```bash
+./bin/myyolo sync mysign --profile point
+./bin/myyolo discover admin --profile point
+./bin/myyolo report summary --format json
+./bin/myyolo report admin-capabilities --format json
+```
+
+Agents must not expose credentials, cookies, tokens, member data, or databases;
+parallelize source reads; lower the admin delay; continue after rate limits,
+CAPTCHA, auth anomalies, or schema drift; or enable personal reports without
+the explicit `--include-personal-data` gate. The machine-readable scopes are in
+[`docs/capabilities.md`](docs/capabilities.md), metric definitions in
+[`docs/data-dictionary.md`](docs/data-dictionary.md), and trust boundaries in
+[`docs/architecture.md`](docs/architecture.md).
 
 ## Configure one or more accounts
 
-The password prompt has no terminal echo. Passwords are never accepted as command-line arguments:
+One profile contains one credential envelope, a separate mySIGN session, and a
+separate admin cookie session. The password prompt has no terminal echo.
+Passwords are never accepted as command-line arguments:
 
 ```bash
 myyolo auth login \
   --profile studio-a \
+  --source all \
   --partner YOUR_PARTNER_NUMBER \
   --username YOUR_USERNAME
 ```
 
-Use another profile for the second authorized login. For automation, `--password-stdin` is preferred. `MYYOLO_PASSWORD` is supported as a fallback but may be visible to privileged local processes.
+Use another profile for a second authorized account. `--source mysign` or
+`--source admin` validates only one system; `--source all` is the normal setup
+and succeeds only when both logins succeed. For automation, `--password-stdin`
+is preferred. `MYYOLO_PASSWORD` is supported as a fallback but may be visible
+to privileged local processes.
 
 ```bash
 printf '%s\n' "$PASSWORD" | myyolo auth login \
   --profile studio-b \
+  --source all \
   --partner "$PARTNER" \
   --username "$USER" \
   --password-stdin
 ```
 
 ```bash
+myyolo auth check --profile studio-a --source all
 myyolo auth status --profile studio-a
 myyolo auth logout --profile studio-a
 ```
@@ -110,16 +192,29 @@ Logout removes only the local keyring profile, not the remote account.
 
 #### `myyolo auth login`
 
-Authenticates against mySIGN, then stores the credential envelope and returned session in the operating-system keyring.
+Authenticates against the selected source or both sources, then stores the
+credential envelope and source-specific sessions in the operating-system
+keyring.
 
 | Flag | Required | Default | Meaning |
 |---|---:|---|---|
 | `--profile NAME` | no | `default` | Local name for one isolated login |
+| `--source SOURCE` | no | `all` | `mysign`, `admin`, or both |
 | `--partner NUMBER` | yes | — | myYOLO partner number |
 | `--username USER` | yes | — | myYOLO username |
 | `--password-stdin` | no | false | Read the password from standard input |
 
 Profile names may contain letters, numbers, `.`, `_` and `-`, are limited to 64 characters and cannot start with punctuation. The CLI deliberately has no `--password` flag because process arguments may be visible to other software.
+
+#### `myyolo auth check`
+
+Performs the smallest remote read for the selected source. A working cached
+session is reused. An expired session triggers exactly one login and one final
+read; failure then stops. The repaired session is saved for the next command.
+
+```bash
+myyolo auth check --profile studio-a --source all
+```
 
 #### `myyolo auth status`
 
@@ -129,29 +224,40 @@ Checks only the local keyring. It does not test the remote account and makes no 
 myyolo auth status --profile studio-a
 ```
 
-The JSON response contains `configured` and `session_cached`.
+The JSON response shows credential presence and both source-specific session
+caches. It does not reveal usernames, passwords, cookies, or tokens.
 
 #### `myyolo auth logout`
 
-Deletes that profile's credentials and cached session from the local keyring. It does not call a remote logout route and does not remove the SQLite database.
+Deletes that profile's credentials and both cached sessions from the local
+keyring. It does not call a remote logout route and does not remove the SQLite
+database.
 
 ## Sync and reports
 
 ```bash
-myyolo sync --profile studio-a
+myyolo sync mysign --profile studio-a
+myyolo sync admin --profile studio-a
+myyolo discover admin --profile studio-a
 myyolo report summary
 myyolo report courses
 myyolo report days
 myyolo report hours
 myyolo report sessions
 myyolo report members --include-personal-data --format csv
+myyolo report admin-capabilities
+myyolo report admin-reha-hours
+myyolo report admin-course-months
+myyolo report admin-missing-signatures
 ```
 
 Reports support table, JSON and CSV. The default database is `~/.local/share/myyolo-cli/myyolo.sqlite`; override it with `--db` or `MYYOLO_DB_PATH`. Give each profile a separate database when source accounts must remain isolated.
 
-### `myyolo sync`
+### mySIGN sync
 
 ```bash
+myyolo sync mysign [--profile NAME] [--db PATH]
+# Backward-compatible shorthand:
 myyolo sync [--profile NAME] [--db PATH]
 ```
 
@@ -165,14 +271,43 @@ Request sequence:
 
 There is no fourth request, generic retry loop or partial database import. Authentication failure, HTTP errors, oversized responses, unknown schema and broken cross-references return a non-zero exit status.
 
+### Admin sync and discovery
+
+```bash
+myyolo sync admin \
+  [--profile NAME] [--db PATH] \
+  [--delay 2s] [--request-budget 5]
+
+myyolo discover admin \
+  [--profile NAME] [--db PATH] \
+  [--delay 2s] [--request-budget 10]
+```
+
+`sync admin` reads only the attendance landing page. `discover admin` reads the
+six documented aggregate/list pages in
+[the capability map](docs/capabilities.md). Both commands are serial. The CLI
+rejects delays below two seconds and budgets above the hard limits. A valid
+cached discovery needs seven requests including its session probe; the
+worst-case expired-session flow needs exactly ten.
+
+Remote HTTP 429, CAPTCHA, an unexpected redirect, login failure, request-budget
+exhaustion, or schema drift ends the command immediately. Discovery imports
+nothing unless all six remote reads succeeded.
+
 ### Database commands
 
 ```bash
 myyolo db init [--db PATH]
+myyolo db status [--format table|json|csv] [--db PATH]
+myyolo doctor [--profile NAME] [--db PATH]
 myyolo import mysign --file PATH [--db PATH]
 ```
 
 `db init` creates or migrates an empty local database. `import mysign` parses a local `GetListData` JSON response and uses the same validation and transactional import path as live sync. Offline import exists for development and recovery; raw live responses should not normally be retained.
+
+`db status` performs SQLite `quick_check` and returns schema version, source
+counts, and last successful sync timestamps. `doctor` adds a local-only
+keyring-readiness check; it never tests either remote session.
 
 ### Report command reference
 
@@ -190,12 +325,27 @@ myyolo report REPORT [--db PATH] [--format table|json|csv]
 | `hours` | Course starting hour | Sessions, bookings and every attendance metric |
 | `sessions` | Course occurrence | Date, time, course, room and every attendance metric |
 | `members` | Member | Source ID, member number, name and every attendance metric |
+| `admin-capabilities` | Admin route/table | Route, title, headings, schema fingerprint, row count, observation time |
+| `admin-reha-hours` | Reha time window | Attendees, duration and attendee-minutes |
+| `admin-course-months` | Calendar month | Participants and courses with numeric values |
+| `admin-missing-signatures` | Current aggregate | Member rows and exposed missing-signature quantity |
+| `admin-reha-attendance` | Member row | Current Reha attendance details |
+| `admin-missing-signature-members` | Member row | Current missing-signature details |
+| `admin-records` | Route/table row | Generic structured values for current or historic observations |
 
-The member report can expose personal data and therefore requires the explicit gate:
+Member and admin-detail reports can expose personal data and therefore require
+the explicit gate:
 
 ```bash
 myyolo report members --include-personal-data
+myyolo report admin-reha-attendance --include-personal-data
+myyolo report admin-missing-signature-members --include-personal-data
+myyolo report admin-records --include-personal-data [--route EXACT_PATH]
 ```
+
+mySIGN reports accept `--as-of RFC3339`. This makes pending/no-show boundaries
+reproducible. Admin reports always use the newest complete observation for
+their route.
 
 Output formats:
 
@@ -221,7 +371,8 @@ The reports use the stored mySIGN flags; they do not infer physical presence fro
 | `signed` | `HatUnterschrift = true` |
 | `cancelled` | `Storniert = true` |
 | `missing_signatures` | Attended, not signed and not cancelled |
-| `no_shows` | Not attended and not cancelled |
+| `no_shows` | Not attended, not cancelled, and course end is strictly before report `as-of` |
+| `pending` | Not attended, not cancelled, and course end is current, future, or unknown |
 | `distinct_participants` | Unique myYOLO member IDs represented in attendance rows |
 
 These are technical definitions. Validate them against the operational meaning used by your organization before treating them as billing, compliance or management KPIs.
@@ -237,6 +388,11 @@ mySIGN returns a rolling snapshot rather than a complete historical export. Each
 - failed imports roll back their data transaction and are marked failed.
 
 This means history becomes more useful over time while report commands remain remote-request-free. It does not reconstruct periods that were never captured.
+
+Admin discovery retains schema/provenance metadata and distinct structured row
+versions. Domain reports select only rows belonging to the newest complete
+observation, so repeated discovery is idempotent and old row versions do not
+inflate current totals.
 
 ## Multiple logins and databases
 
@@ -255,11 +411,13 @@ Do not point unrelated profiles at the same database unless combining those reco
 
 | Table | Contents |
 |---|---|
-| `members` | Source member ID, member number, first and last name |
-| `course_sessions` | Date, course, room, time window and source counts |
-| `attendance` | Member/session/prescription relationship and attendance flags |
-| `prescriptions` | Treatment, weekly-treatment and visit counters |
-| `sync_runs` | Source, normalized payload hash, timestamps, status and row counts |
+| `members` | Source namespace, member ID, member number and name |
+| `course_sessions` | Source namespace, date, course, room, time window, parsed UTC end and source counts |
+| `attendance` | Source namespace, member/session/prescription relationship and attendance flags |
+| `prescriptions` | Source namespace, treatment, weekly-treatment and visit counters |
+| `admin_capabilities` | Exact route, page/table metadata, schema fingerprint and latest observation |
+| `admin_records` | Exact route/table, deterministic row hash, structured values and observation history |
+| `sync_runs` | Source, normalized/schema fingerprint, timestamps, status and row counts |
 
 Raw HTTP response bodies, passwords, cookies and rotating request tokens are not written to SQLite.
 
@@ -268,18 +426,21 @@ Raw HTTP response bodies, passwords, cookies and rotating request tokens are not
 ```text
 myyolo help
 myyolo version
-myyolo auth login [--profile NAME] --partner NUMBER --username USER [--password-stdin]
+myyolo auth login [--profile NAME] [--source mysign|admin|all] --partner NUMBER --username USER [--password-stdin]
+myyolo auth check [--profile NAME] [--source mysign|admin|all]
 myyolo auth status [--profile NAME]
 myyolo auth logout [--profile NAME]
-myyolo sync [--profile NAME] [--db PATH]
+myyolo sync [mysign] [--profile NAME] [--db PATH]
+myyolo sync admin [--profile NAME] [--db PATH] [--delay DURATION] [--request-budget 1..5]
+myyolo discover admin [--profile NAME] [--db PATH] [--delay DURATION] [--request-budget 1..10]
 myyolo db init [--db PATH]
+myyolo db status [--format table|json|csv] [--db PATH]
+myyolo doctor [--profile NAME] [--db PATH]
 myyolo import mysign --file PATH [--db PATH]
-myyolo report summary [--format table|json|csv] [--db PATH]
-myyolo report courses [--format table|json|csv] [--db PATH]
-myyolo report days [--format table|json|csv] [--db PATH]
-myyolo report hours [--format table|json|csv] [--db PATH]
-myyolo report sessions [--format table|json|csv] [--db PATH]
-myyolo report members --include-personal-data [--format table|json|csv] [--db PATH]
+myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
+myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
+myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
+myyolo report admin-reha-attendance|admin-missing-signature-members|admin-records --include-personal-data [--route EXACT_PATH] [--format table|json|csv] [--db PATH]
 ```
 
 ## Platform behavior
@@ -306,7 +467,15 @@ Check partner number, username and password. The CLI does not keep rejected cred
 
 ### Session expired
 
-A normal sync handles this once automatically. If the final read still reports an expired session, the command stops. Re-run `auth login` deliberately rather than looping sync.
+A normal check, sync, or discovery handles this once automatically. If the
+final read still reports an expired session, the command stops. Re-run
+`auth login` deliberately rather than looping the command.
+
+### Rate limit or CAPTCHA
+
+The CLI stops without retrying. Do not lower the delay, rotate identities, or
+automate around the block. Wait for the operator/provider-approved window and
+retry deliberately.
 
 ### Response schema changed
 
@@ -340,10 +509,11 @@ make check   # format, module, vet, race, and build gates
 make build   # local binary in bin/myyolo
 ```
 
-The tests cover strict snapshot parsing, idempotent imports, failed-import
-auditing, file permissions, every report, secret-store behavior, write-route
-denial, response-size limits, password redaction, schema drift, cached sessions,
-the exact re-login request sequence and the three-request ceiling.
+The tests cover strict JSON and HTML parsing, migration/idempotency,
+latest-snapshot selection, fixed-clock no-show boundaries, file permissions,
+personal-data gates, output formats, separate keyring sessions, exact route
+allowlists, delays and budgets, rate-limit/CAPTCHA stops, response-size limits,
+redaction, schema drift, cached sessions and exact one-time re-login sequences.
 
 CI runs the same quality gates plus `govulncheck`. Tagged `v*` pushes use
 GoReleaser to build checksummed archives for macOS, Linux and Windows on AMD64
@@ -355,6 +525,12 @@ live traffic:
 ```bash
 cli-printing-press generate \
   --spec ./printing-press/myyolo-pp-spec.yaml \
+  --spec-source browser-sniffed \
+  --transport standard \
+  --dry-run
+
+cli-printing-press generate \
+  --spec ./printing-press/myyolo-admin-pp-spec.yaml \
   --spec-source browser-sniffed \
   --transport standard \
   --dry-run

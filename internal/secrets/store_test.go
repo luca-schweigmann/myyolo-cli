@@ -80,3 +80,52 @@ func TestProfileValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestSourceSessionsUseDistinctKeyringAccounts(t *testing.T) {
+	backend := &memoryBackend{values: map[string]string{}}
+	store := NewStore(backend)
+	if err := store.SaveMySignSession("studio-a", Session{
+		NextRequestToken: "mysign-token",
+		Cookies:          []Cookie{{Name: "mysign", Value: "one"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveAdminSession("studio-a", AdminSession{
+		Cookies: []Cookie{{Name: "ASPSESSIONID", Value: "two"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(backend.values) != 2 {
+		t.Fatalf("keyring entries = %d, want 2", len(backend.values))
+	}
+	mySignSession, err := store.LoadMySignSession("studio-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminSession, err := store.LoadAdminSession("studio-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mySignSession.NextRequestToken != "mysign-token" {
+		t.Fatalf("mySIGN session = %#v", mySignSession)
+	}
+	if got := adminSession.Cookies[0].Name; got != "ASPSESSIONID" {
+		t.Fatalf("admin cookie name = %q", got)
+	}
+}
+
+func TestLegacyMySignSessionStillLoads(t *testing.T) {
+	backend := &memoryBackend{values: map[string]string{}}
+	store := NewStore(backend)
+	legacy := Session{NextRequestToken: "legacy"}
+	if err := store.save(account("studio-a", "session"), legacy); err != nil {
+		t.Fatal(err)
+	}
+	session, err := store.LoadMySignSession("studio-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.NextRequestToken != "legacy" {
+		t.Fatalf("session = %#v", session)
+	}
+}

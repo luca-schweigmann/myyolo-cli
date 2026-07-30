@@ -24,3 +24,26 @@ func TestCSVAndTable(t *testing.T) {
 		}
 	}
 }
+
+func TestCSVNeutralizesSpreadsheetFormulas(t *testing.T) {
+	var output bytes.Buffer
+	rows := []row{
+		{Name: "=HYPERLINK(\"https://example.invalid\")", Count: 1},
+		{Name: "+cmd", Count: 2},
+		{Name: "-1+2", Count: 3},
+		{Name: "@SUM(1,2)", Count: 4},
+	}
+	if err := Write(&output, rows, "csv"); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		`'=HYPERLINK(""https://example.invalid"")`,
+		`'+cmd`,
+		`'-1+2`,
+		`'@SUM(1,2)`,
+	} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("CSV output %q lacks neutralized %q", output.String(), expected)
+		}
+	}
+}

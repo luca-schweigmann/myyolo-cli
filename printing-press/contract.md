@@ -1,8 +1,12 @@
 # Printing Press contract
 
-The spec in `myyolo-pp-spec.yaml` records the two observed JSON routes used by
-the CLI. It contains no credentials, cookies, tokens, member records, captured
-responses or HAR files.
+The specs record the two observed source contracts:
+
+- `myyolo-pp-spec.yaml`: mySIGN JSON login and rotating snapshot.
+- `myyolo-admin-pp-spec.yaml`: classic ASP login and six aggregate HTML reads.
+
+They contain no credentials, cookies, tokens, member records, captured
+responses, or HAR files.
 
 Printing Press is used here as a reproducible contract and generator check, not
 as the runtime security boundary. Version 4.22.1 classifies the two `POST`
@@ -12,9 +16,12 @@ these runtime invariants in the generated client:
 - `POST /Home/GetListData` is semantically read-only;
 - only the two exact host/method/path combinations may leave the process;
 - passwords belong in the operating-system keyring;
-- a sync may make at most three requests;
+- a mySIGN sync may make at most three requests;
 - an expired session causes exactly one re-login;
 - a schema change must stop without re-authentication;
+- the admin client must count redirects manually, wait at least two seconds,
+  and share a maximum ten-request discovery budget;
+- mySIGN and admin sessions must never share a keyring account or cookie jar;
 - all other myYOLO routes are denied.
 
 The hand-written packages under `internal/transport` and `internal/secrets`
@@ -29,6 +36,12 @@ cli-printing-press generate \
   --spec-source browser-sniffed \
   --transport standard \
   --dry-run
+
+cli-printing-press generate \
+  --spec ./printing-press/myyolo-admin-pp-spec.yaml \
+  --spec-source browser-sniffed \
+  --transport standard \
+  --dry-run
 ```
 
-The dry run must parse the spec without credentials or live traffic.
+Both dry runs must parse without credentials or live traffic.
