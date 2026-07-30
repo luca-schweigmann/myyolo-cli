@@ -1,0 +1,120 @@
+{
+  "nextRequestToken": "synthetic-token-not-a-secret",
+  "KursBuchungen": [
+    {
+      "Id": 101,
+      "DatumISO8601": "2026-07-28T09:00:00+02:00",
+      "DatumFormatted": "28.07.2026",
+      "Beschreibung": "Reha Rücken",
+      "RaumName": "Kursraum 1",
+      "VonBisFormatted": "09:00 - 09:45",
+      "TeilnehmerAnzahl": 2,
+      "IstInAktuellerWoche": true,
+      "DatumUnterschriftAbISO8601": "2026-07-28T08:55:00+02:00"
+    },
+    {
+      "Id": "102",
+      "DatumISO8601": "2026-07-29T18:00:00+02:00",
+      "DatumFormatted": "29.07.2026",
+      "Beschreibung": "Reha Knie",
+      "RaumName": "Kursraum 2",
+      "VonBisFormatted": "18:00 - 18:45",
+      "TeilnehmerAnzahl": 1,
+      "IstInAktuellerWoche": 1,
+      "DatumUnterschriftAbISO8601": "2026-07-29T17:55:00+02:00"
+    }
+  ],
+  "KursTeilnehmer": [
+    {
+      "Id": 1001,
+      "MitgliedId": 501,
+      "KursBuchungId": 101,
+      "VerordnungId": 701,
+      "HatUnterschrift": true,
+      "TrainingAmVortag": false,
+      "UnterschriftManuell": false,
+      "Teilgenommen": 1,
+      "Storniert": false,
+      "IstManuelleMitgliedzeit": false,
+      "IstInAktuellerWoche": true,
+      "Datum": "2026-07-28",
+      "DatumFormatted": "28.07.2026",
+      "VonBisFormatted": "09:00 - 09:45",
+      "Kurs": "Reha Rücken",
+      "RestEinheiten": 12,
+      "Type": "Reha",
+      "VerordnungTyp": "Reha",
+      "ManuellerTerminVerordnungType": ""
+    },
+    {
+      "Id": 1002,
+      "MitgliedId": 502,
+      "KursBuchungId": 101,
+      "VerordnungId": 702,
+      "HatUnterschrift": false,
+      "TrainingAmVortag": false,
+      "UnterschriftManuell": false,
+      "Teilgenommen": true,
+      "Storniert": false,
+      "IstManuelleMitgliedzeit": false,
+      "IstInAktuellerWoche": true,
+      "Datum": "2026-07-28",
+      "DatumFormatted": "28.07.2026",
+      "VonBisFormatted": "09:00 - 09:45",
+      "Kurs": "Reha Rücken",
+      "RestEinheiten": 8,
+      "Type": "Reha",
+      "VerordnungTyp": "Reha",
+      "ManuellerTerminVerordnungType": ""
+    },
+    {
+      "Id": 1003,
+      "MitgliedId": 501,
+      "KursBuchungId": 102,
+      "VerordnungId": 701,
+      "HatUnterschrift": false,
+      "TrainingAmVortag": false,
+      "UnterschriftManuell": false,
+      "Teilgenommen": false,
+      "Storniert": true,
+      "IstManuelleMitgliedzeit": false,
+      "IstInAktuellerWoche": true,
+      "Datum": "2026-07-29",
+      "DatumFormatted": "29.07.2026",
+      "VonBisFormatted": "18:00 - 18:45",
+      "Kurs": "Reha Knie",
+      "RestEinheiten": 12,
+      "Type": "Reha",
+      "VerordnungTyp": "Reha",
+      "ManuellerTerminVerordnungType": ""
+    }
+  ],
+  "Mitglieder": {
+    "501": {
+      "Name": "Beispiel",
+      "Vorname": "Alex",
+      "MitgliedsNummer": "SYN-1001"
+    },
+    "502": {
+      "Id": 502,
+      "Name": "Muster",
+      "Vorname": "Sam",
+      "MitgliedsNummer": "SYN-1002"
+    }
+  },
+  "Verordnungen": {
+    "701": {
+      "EndeText": "31.12.2026",
+      "AnzahlBehandlungen": 50,
+      "AnzahlBehandlungenWoechentlich": 2,
+      "Besuche": 12
+    },
+    "702": {
+      "Id": "702",
+      "EndeText": "30.11.2026",
+      "AnzahlBehandlungen": 50,
+      "AnzahlBehandlungenWoechentlich": 1,
+      "Besuche": 8
+    }
+  }
+}

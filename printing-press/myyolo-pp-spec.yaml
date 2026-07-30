@@ -1,0 +1,88 @@
+name: myyolo
+description: |
+  Observed mySIGN browser-API contract used by myyolo-cli. The remote API uses
+  JSON POST requests for both authentication and a semantically read-only
+  snapshot operation. Generated output is reference-only: the shipped CLI keeps
+  its hand-written request allowlist, keyring integration, request budget and
+  exact-one-relogin state machine.
+version: "0.1.0"
+base_url: "https://sign.azh-myyolo.info"
+spec_source: browser-sniffed
+
+auth:
+  type: none
+  header: ""
+  format: ""
+  env_vars: []
+
+config:
+  format: toml
+  path: "~/.config/myyolo-pp-cli/config.toml"
+
+resources:
+  session:
+    description: Establish a mySIGN session and obtain the rotating request token.
+    endpoints:
+      login:
+        method: POST
+        path: "/Home/LoginUser"
+        description: |
+          Authenticate one partner-scoped user. Password input must be collected
+          without terminal echo and must never be accepted as a command-line
+          argument by the production CLI.
+        body:
+          - name: username
+            type: string
+            required: true
+            description: mySIGN username.
+          - name: password
+            type: string
+            required: true
+            description: Sensitive mySIGN password; never log or persist outside the OS keyring.
+          - name: partnerNumber
+            flag_name: partner-number
+            type: string
+            required: true
+            description: Partner number that scopes the mySIGN account.
+        response:
+          type: object
+          item: LoginResponse
+
+  snapshots:
+    description: Read the current course, attendance, member and prescription snapshot.
+    endpoints:
+      get_list_data:
+        method: POST
+        path: "/Home/GetListData"
+        description: |
+          Semantically read-only snapshot request. The nextRequestToken rotates
+          and must replace the token sent with the request.
+        body:
+          - name: nextRequestToken
+            flag_name: next-request-token
+            type: string
+            required: true
+            description: Opaque rotating session token; treat as a secret.
+        response:
+          type: object
+          item: Snapshot
+
+types:
+  LoginResponse:
+    fields:
+      - name: nextRequestToken
+        type: string
+      - name: rsaPublicKey
+        type: object
+  Snapshot:
+    fields:
+      - name: nextRequestToken
+        type: string
+      - name: KursBuchungen
+        type: array
+      - name: KursTeilnehmer
+        type: array
+      - name: Mitglieder
+        type: object
+      - name: Verordnungen
+        type: object
