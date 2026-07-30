@@ -78,3 +78,14 @@ func TestVersion(t *testing.T) {
 		t.Fatal("version output is empty")
 	}
 }
+
+func TestBuildVersionPrefersLinkerValue(t *testing.T) {
+	previous := version
+	version = "v0.1.0"
+	t.Cleanup(func() {
+		version = previous
+	})
+	if got := buildVersion(); got != "v0.1.0" {
+		t.Fatalf("buildVersion() = %q", got)
+	}
+}

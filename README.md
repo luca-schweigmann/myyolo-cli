@@ -36,6 +36,15 @@ source identifiers intact and builds history over repeated syncs.
 
 ## Install
 
+Prebuilt archives and `checksums.txt` are published on the
+[GitHub Releases page](https://github.com/luca-schweigmann/myyolo-cli/releases).
+Choose the archive matching macOS, Linux or Windows and AMD64 or ARM64, extract
+it, and place `myyolo` (`myyolo.exe` on Windows) on your `PATH`.
+
+Release archives are checksummed but not currently code-signed or notarized.
+Verify the checksum before use. Organizations requiring signed binaries should
+build from the reviewed source until a signing pipeline is added.
+
 With Go 1.26.5 or newer:
 
 ```bash

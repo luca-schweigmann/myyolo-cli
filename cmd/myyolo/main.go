@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
+	"strings"
 )
 
 var version = "dev"
@@ -70,8 +72,31 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 			return printReport(ctx, "summary", args[2:], stdout)
 		}
 	case "version":
-		_, err := fmt.Fprintln(stdout, version)
+		_, err := fmt.Fprintln(stdout, buildVersion())
 		return err
 	}
 	return fmt.Errorf("unknown command\n\n%s", usage)
+}
+
+func buildVersion() string {
+	if version != "" && version != "dev" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" && setting.Value != "" {
+			revision := setting.Value
+			if len(revision) > 12 {
+				revision = revision[:12]
+			}
+			return "dev+" + strings.ToLower(revision)
+		}
+	}
+	return "dev"
 }
