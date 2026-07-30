@@ -18,6 +18,7 @@ import (
 	"github.com/luca-schweigmann/myyolo-cli/internal/admin"
 	"github.com/luca-schweigmann/myyolo-cli/internal/mysign"
 	"github.com/luca-schweigmann/myyolo-cli/internal/output"
+	"github.com/luca-schweigmann/myyolo-cli/internal/readcatalog"
 	"github.com/luca-schweigmann/myyolo-cli/internal/secrets"
 	"github.com/luca-schweigmann/myyolo-cli/internal/store"
 	"github.com/luca-schweigmann/myyolo-cli/internal/transport"
@@ -328,6 +329,11 @@ func authCheck(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("auth check", flag.ContinueOnError)
 	profile := flags.String("profile", "default", "credential profile")
 	source := flags.String("source", "all", "check mysign, admin or all")
+	forceRelogin := flags.Bool(
+		"force-relogin",
+		false,
+		"ignore cached sessions and verify one autonomous login flow",
+	)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -350,12 +356,16 @@ func authCheck(ctx context.Context, args []string, stdout io.Writer) error {
 		AdminTables   int    `json:"admin_tables,omitempty"`
 		AdminRecords  int    `json:"admin_records,omitempty"`
 		AdminSchema   string `json:"admin_schema_fingerprint,omitempty"`
-	}{Profile: *profile}
+		ForcedRelogin bool   `json:"forced_relogin"`
+	}{Profile: *profile, ForcedRelogin: *forceRelogin}
 
 	if *source == "mysign" || *source == "all" {
-		session, loadErr := secretStore.LoadMySignSession(*profile)
-		if loadErr != nil && !secrets.IsNotFound(loadErr) {
-			return loadErr
+		var session secrets.Session
+		if !*forceRelogin {
+			session, err = secretStore.LoadMySignSession(*profile)
+			if err != nil && !secrets.IsNotFound(err) {
+				return err
+			}
 		}
 		client, clientErr := transport.New(&http.Client{})
 		if clientErr != nil {
@@ -372,9 +382,12 @@ func authCheck(ctx context.Context, args []string, stdout io.Writer) error {
 		result.MySignMembers = len(snapshot.Members)
 	}
 	if *source == "admin" || *source == "all" {
-		session, loadErr := secretStore.LoadAdminSession(*profile)
-		if loadErr != nil && !secrets.IsNotFound(loadErr) {
-			return loadErr
+		var session secrets.AdminSession
+		if !*forceRelogin {
+			session, err = secretStore.LoadAdminSession(*profile)
+			if err != nil && !secrets.IsNotFound(err) {
+				return err
+			}
 		}
 		client, clientErr := admin.New(&http.Client{})
 		if clientErr != nil {
@@ -517,6 +530,16 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 		false,
 		"allow member names and identifiers in local output",
 	)
+	includeHealthData := flags.Bool(
+		"include-health-data",
+		false,
+		"allow Reha, prevention and prescription data in local output",
+	)
+	includeFinancialData := flags.Bool(
+		"include-financial-data",
+		false,
+		"allow bank and billing data in local output",
+	)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -571,6 +594,25 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 	case "admin-records":
 		if !*includePersonalData {
 			return errors.New("admin record report requires --include-personal-data")
+		}
+		scope := dataScopeFlags{
+			personal:  includePersonalData,
+			health:    includeHealthData,
+			financial: includeFinancialData,
+		}
+		if *route == "" {
+			if !*includeHealthData || !*includeFinancialData {
+				return errors.New(
+					"unfiltered admin records require --include-personal-data, " +
+						"--include-health-data and --include-financial-data",
+				)
+			}
+		} else if sensitivity, ok := readcatalog.SensitivityForStoredRoute(*route); ok {
+			if err := scope.authorize(sensitivity); err != nil {
+				return err
+			}
+		} else if !*includeHealthData || !*includeFinancialData {
+			return errors.New("an unclassified admin route requires all data-scope flags")
 		}
 		report, err = db.AdminRecords(ctx, *route)
 	default:

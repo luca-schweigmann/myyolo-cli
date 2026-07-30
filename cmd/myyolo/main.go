@@ -15,12 +15,14 @@ const usage = `myyolo - read-only myYOLO collector and reporting CLI
 
 Usage:
   myyolo auth login [--profile NAME] [--source mysign|admin|all] --partner NUMBER --username USER [--password-stdin]
-  myyolo auth check [--profile NAME] [--source mysign|admin|all]
+  myyolo auth check [--profile NAME] [--source mysign|admin|all] [--force-relogin]
   myyolo auth status [--profile NAME]
   myyolo auth logout [--profile NAME]
   myyolo sync [mysign] [--profile NAME] [--db PATH]
   myyolo sync admin [--profile NAME] [--db PATH] [--delay 2s] [--request-budget 1..5]
   myyolo discover admin [--profile NAME] [--db PATH] [--delay 2s] [--request-budget 1..10]
+  myyolo catalog [--group analytics|courses|members|prescriptions|compliance|financial] [--format table|json|csv]
+  myyolo collect CAPABILITY [filters] [--profile NAME] [--db PATH] [--delay 2s] [--request-budget 1..5]
   myyolo db init [--db PATH]
   myyolo db status [--format table|json|csv] [--db PATH]
   myyolo doctor [--profile NAME] [--db PATH]
@@ -28,11 +30,13 @@ Usage:
   myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
   myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
   myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
-  myyolo report admin-reha-attendance|admin-missing-signature-members|admin-records --include-personal-data [--route EXACT_PATH] [--format table|json|csv] [--db PATH]
+  myyolo report capability CAPABILITY [data-scope flags] [--format table|json|csv] [--db PATH]
+  myyolo report admin-reha-attendance|admin-missing-signature-members|admin-records --include-personal-data [data-scope flags] [--route EXACT_PATH] [--format table|json|csv] [--db PATH]
   myyolo version
 
 Credentials and cached sessions are stored in the operating-system keyring.
-The CLI never calls a myYOLO write endpoint.`
+The CLI never calls a myYOLO write endpoint. Collect runs are serial, delayed,
+limited to one capability and capped at five HTTP requests including relogin.`
 
 func main() {
 	if err := run(context.Background(), os.Args[1:], os.Stdin, os.Stdout); err != nil {
@@ -74,6 +78,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 		if len(args) >= 2 && args[1] == "admin" {
 			return discoverAdmin(ctx, args[2:], stdout)
 		}
+	case "catalog":
+		return printCatalog(args[1:], stdout)
+	case "collect":
+		if len(args) >= 2 {
+			return collectCapability(ctx, args[1], args[2:], stdout)
+		}
 	case "db":
 		if len(args) >= 2 && args[1] == "init" {
 			return initDB(ctx, args[2:], stdout)
@@ -88,6 +98,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 			return importMySign(ctx, args[2:], stdout)
 		}
 	case "report":
+		if len(args) >= 3 && args[1] == "capability" {
+			return printCapabilityReport(ctx, args[2], args[3:], stdout)
+		}
 		if len(args) >= 2 {
 			return printReport(ctx, args[1], args[2:], stdout)
 		}

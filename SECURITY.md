@@ -20,6 +20,10 @@ Include a minimal synthetic reproducer, affected version and expected impact. Re
 - Keep exported CSV/JSON reports out of shared folders and source control.
 - Do not weaken the two-second admin delay or increase the compiled request
   ceilings. Stop after rate limits, CAPTCHA, auth anomalies, or schema drift.
+- Do not run overlapping collection processes. Prefer one selected `collect`
+  operation followed by any number of local reports.
+- Enable personal, health or financial collection/report flags only for the
+  authorized purpose and keep financial collection isolated from routine jobs.
 - Remove a local profile with `myyolo auth logout --profile NAME` when access
   ends. This removes credentials plus the separate mySIGN/admin sessions from
   the keyring, not the remote account.

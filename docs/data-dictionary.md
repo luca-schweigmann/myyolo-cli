@@ -38,13 +38,19 @@ Admin domain reports use only records whose `last_observed_at` equals the
 current capability observation. Older distinct row versions remain in SQLite
 for history but do not inflate current reports.
 
+`report capability NAME` applies the same latest-observation rule to every
+typed capability. The stored route is `capability:NAME`; dynamic member IDs,
+search text, dates and other submitted filter values are not included in that
+route key or command output.
+
 ## Provenance and retention
 
 - `sync_runs` records source, normalized/schema fingerprint, start/completion,
   status, and aggregate row counts.
 - mySIGN records retain stable remote IDs plus `source='mysign'`.
-- admin records retain exact route, leaf-table index, deterministic row hash,
-  structured JSON values, first observation, and last observation.
+- admin records retain an exact route or parameter-free capability key,
+  leaf-table index, deterministic row hash, structured JSON values, first
+  observation, and last observation.
 - admin capability fingerprints include routes, titles, headings, headers, and
   sanitized form metadata; row values do not affect the fingerprint.
 - raw HTTP bodies, passwords, cookies, tokens, HTML files, and signature images

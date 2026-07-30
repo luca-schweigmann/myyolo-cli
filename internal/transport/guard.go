@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/luca-schweigmann/myyolo-cli/internal/readcatalog"
 )
 
 const mySignHost = "sign.azh-myyolo.info"
@@ -42,9 +44,10 @@ var allowed = map[string]map[string]routePolicy{
 	},
 }
 
-// ValidateReadRequest is the final network gate. Only explicitly classified
-// reads are allowed. A POST is not assumed to be a write or read from its verb;
-// the exact observed route must be listed.
+// ValidateReadRequest is the final URL gate. Only explicitly classified reads
+// are allowed. A POST is not assumed to be a write or read from its verb; the
+// exact observed route must be listed. Typed POST bodies are validated by
+// readcatalog.ValidateRequest before the admin client reaches this layer.
 func ValidateReadRequest(method, rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -71,11 +74,17 @@ func ValidateReadRequest(method, rawURL string) error {
 
 	key := strings.ToUpper(method) + " " + parsed.EscapedPath()
 	policy, ok := routes[key]
+	if ok {
+		if _, allowedQuery := policy.rawQueries[parsed.RawQuery]; allowedQuery && !parsed.ForceQuery {
+			return nil
+		}
+	}
+	if host == adminHost && !parsed.ForceQuery &&
+		readcatalog.ValidateAdminURL(method, parsed) {
+		return nil
+	}
 	if !ok {
 		return fmt.Errorf("blocked unapproved route %s on %s", key, host)
 	}
-	if _, ok := policy.rawQueries[parsed.RawQuery]; !ok || parsed.ForceQuery {
-		return fmt.Errorf("blocked unapproved query string on %s", key)
-	}
-	return nil
+	return fmt.Errorf("blocked unapproved query string on %s", key)
 }

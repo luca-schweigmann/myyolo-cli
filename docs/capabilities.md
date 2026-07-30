@@ -4,12 +4,20 @@ This map separates what the CLI has verified from what merely appears as a link
 or possible future integration. It contains no account values, member records,
 captured responses, cookies, or live counts.
 
+The current typed catalogue contains 99 read-only capabilities across
+analytics, courses, members, prescriptions, compliance and isolated financial
+reads. See [the complete read catalogue](read-catalog.md) or run
+`myyolo catalog --format json`.
+
 ## Status vocabulary
 
 - **Supported**: implemented, covered by synthetic tests, and verified against
   the authorized read-only surface.
 - **Structured**: collected into private SQLite with a stable schema fingerprint,
   but not yet promoted into every possible domain-specific report.
+- **Classified**: implemented in the typed allowlist with synthetic validation;
+  the source may still return no rows, a changed schema, or a non-HTML export
+  on a particular installation, in which case collection fails closed.
 - **Linked candidate**: visible from an authorized navigation page but not
   allowlisted or fetched by the CLI.
 - **Out of scope**: deliberately unavailable in the read-only CLI.
@@ -33,6 +41,12 @@ captures but cannot reconstruct periods that were never collected.
 
 ## Classic myYOLO administration
 
+The original six-page `discover admin` command remains a bounded compatibility
+and schema-discovery path. New operational reads use
+`myyolo collect CAPABILITY`, which validates one typed capability and its
+parameters, makes at most five requests including session recovery, and stores
+the result under a parameter-free capability key.
+
 All routes below are exact-host, exact-method, exact-path GET reads. Login uses
 the observed form POST plus its two observed redirect hops. Discovery never
 submits member IDs, signatures, edits, billing actions, or date-search forms.
@@ -51,22 +65,27 @@ The Reha time-window report provides scheduled or recorded windows exposed by
 that page. It calculates minutes per window and attendee-minutes. It does not
 claim that these windows are equivalent to Magicline entry/exit events.
 
-### Linked candidates not fetched
+### Typed capabilities
 
-Authorized navigation exposes additional areas, including prevention
-attendance, people, course planners, management, marketing, and debit/billing
-navigation. They are not allowlisted merely because a link exists. Each needs a
-separate read-only classification, bounded parser, synthetic contract, and
-operator-value justification before it can enter discovery.
+The classified catalogue adds 99 individually selectable reads. It includes
+historical aggregate attendance, course and participant controlling,
+person-level check-in/Reha history, bounded lists and exports,
+billing-readiness checks, and separately gated financial archives. It does not
+crawl navigation or automatically fan out from search results. Each live run
+selects exactly one named capability.
+
+Catalogue membership means the route and parameter shape are classified; it
+does not mean all 99 routes were bulk-tested against a live account. Doing so
+would conflict with the server-load policy. Representative live verification
+should remain small and operator-directed.
 
 ### Deliberately blocked
 
 - logout routes, because remote logout is a state change and local session
   removal is sufficient;
-- member-detail loops and query URLs carrying member IDs;
+- bulk member-detail loops or automatic traversal from a member list;
 - login-time, signature, attendance, contract, billing, note, or course edits;
-- the date-filter POST until its response contract and operational need are
-  independently validated;
+- any form POST not explicitly classified as a semantic read with typed fields;
 - broad crawling, guessed paths, automatic form submission, retries after
   schema drift, CAPTCHA handling, or rate-limit bypass.
 
@@ -84,3 +103,8 @@ serially. With a valid cached session it uses seven requests including the
 session probe. With an expired session it uses exactly ten: one failed probe,
 three login/redirect requests, and six reads. No partial remote result is
 imported if any page fails.
+
+`myyolo collect` is the safer operational default: one session probe plus one
+selected read with a valid cache, or one bounded login plus one selected read.
+Its shared hard ceiling is five requests and its minimum inter-request delay is
+two seconds. There is no `collect all`.
