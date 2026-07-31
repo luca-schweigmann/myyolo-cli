@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 /bin/
+/.gocache/
 /myyolo
 /data/
 *.db

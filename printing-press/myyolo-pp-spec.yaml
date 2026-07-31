@@ -1,10 +1,11 @@
 name: myyolo
 description: |
-  Observed mySIGN browser-API contract used by myyolo-cli. The remote API uses
-  JSON POST requests for both authentication and a semantically read-only
-  snapshot operation. Generated output is reference-only: the shipped CLI keeps
-  its hand-written request allowlist, keyring integration, request budget and
-  exact-one-relogin state machine.
+  Beobachteter mySIGN-Browser-API-Vertrag, den myyolo-cli nutzt. Die Remote-API
+  verwendet JSON-POST-Anfragen sowohl für die Authentifizierung als auch für
+  eine semantisch read-only Snapshot-Operation. Generierte Ausgabe ist nur
+  Referenz: Die ausgelieferte CLI behält ihre handgeschriebene
+  Anfrage-Allowlist, Schlüsselbund-Integration, Anfrage-Budgets und die
+  State-Machine mit genau einem erneuten Login.
 version: "0.1.0"
 base_url: "https://sign.azh-myyolo.info"
 spec_source: browser-sniffed
@@ -21,48 +22,48 @@ config:
 
 resources:
   session:
-    description: Establish a mySIGN session and obtain the rotating request token.
+    description: mySIGN-Sitzung aufbauen und den rotierenden Anfrage-Token holen.
     endpoints:
       login:
         method: POST
         path: "/Home/LoginUser"
         description: |
-          Authenticate one partner-scoped user. Password input must be collected
-          without terminal echo and must never be accepted as a command-line
-          argument by the production CLI.
+          Authentifiziert einen partnerbezogenen Benutzer. Passworteingabe muss
+          ohne Terminal-Echo erfolgen und darf von der Produktions-CLI niemals
+          als Kommandozeilenargument akzeptiert werden.
         body:
           - name: username
             type: string
             required: true
-            description: mySIGN username.
+            description: mySIGN-Benutzername.
           - name: password
             type: string
             required: true
-            description: Sensitive mySIGN password; never log or persist outside the OS keyring.
+            description: Sensibles mySIGN-Passwort; niemals loggen oder außerhalb des OS-Schlüsselbunds speichern.
           - name: partnerNumber
             flag_name: partner-number
             type: string
             required: true
-            description: Partner number that scopes the mySIGN account.
+            description: Partnernummer, die das mySIGN-Konto eingrenzt.
         response:
           type: object
           item: LoginResponse
 
   snapshots:
-    description: Read the current course, attendance, member and prescription snapshot.
+    description: Aktuellen Snapshot zu Kurs, Anwesenheit, Mitglied und Verordnung lesen.
     endpoints:
       get_list_data:
         method: POST
         path: "/Home/GetListData"
         description: |
-          Semantically read-only snapshot request. The nextRequestToken rotates
-          and must replace the token sent with the request.
+          Semantisch read-only Snapshot-Anfrage. nextRequestToken rotiert und
+          muss den mit der Anfrage gesendeten Token ersetzen.
         body:
           - name: nextRequestToken
             flag_name: next-request-token
             type: string
             required: true
-            description: Opaque rotating session token; treat as a secret.
+            description: Undurchsichtiger rotierender Sitzungs-Token; als Geheimnis behandeln.
         response:
           type: object
           item: Snapshot

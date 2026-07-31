@@ -1,57 +1,58 @@
-# Data and metric dictionary
+# Daten- und Metrik-Wörterbuch
 
-## Source namespaces
+## Quell-Namespaces
 
-- `mysign`: rotating JSON snapshot from `sign.azh-myyolo.info`.
-- `admin_page`: structured HTML table observations from
+- `mysign`: rotierender JSON-Snapshot von `sign.azh-myyolo.info`.
+- `admin_page`: strukturierte HTML-Tabellenbeobachtungen von
   `www.azh-myyolo.info`.
 
-Credentials may be shared by an authorized operator profile, but sessions and
-stored records are never merged implicitly.
+Zugangsdaten können über ein autorisiertes Operator-Profil geteilt werden,
+Sitzungen und gespeicherte Datensätze werden jedoch nie implizit zusammengeführt.
 
-## mySIGN metrics
+## mySIGN-Metriken
 
-| Metric | Definition |
+| Metrik | Definition |
 |---|---|
-| `bookings` | Stored member/course relationship rows |
-| `attended` | Source flag `Teilgenommen` is true |
-| `signed` | Source flag `HatUnterschrift` is true |
-| `cancelled` | Source flag `Storniert` is true |
-| `missing_signatures` | Attended, unsigned, and not cancelled |
-| `no_shows` | Unattended, not cancelled, and the parsed course end is before the report `as-of` |
-| `pending` | Unattended, not cancelled, and course end is future, current, or unknown |
-| `distinct_participants` | Distinct mySIGN member IDs represented in attendance |
+| `bookings` | Gespeicherte Mitglied-/Kurs-Beziehungszeilen |
+| `attended` | Quell-Flag `Teilgenommen` ist wahr |
+| `signed` | Quell-Flag `HatUnterschrift` ist wahr |
+| `cancelled` | Quell-Flag `Storniert` ist wahr |
+| `missing_signatures` | Teilgenommen, ohne Unterschrift und nicht storniert |
+| `no_shows` | Nicht teilgenommen, nicht storniert, und das geparste Kursende liegt vor dem Report-`as-of` |
+| `pending` | Nicht teilgenommen, nicht storniert, und Kursende liegt in der Zukunft, aktuell oder ist unbekannt |
+| `distinct_participants` | Verschiedene mySIGN-Mitglieds-IDs in der Anwesenheit |
 
-The `--as-of` flag accepts RFC3339 and makes time-bound reports reproducible.
-At the exact end timestamp a row remains pending; it becomes a no-show only
-after that timestamp.
+Der Schalter `--as-of` akzeptiert RFC3339 und macht zeitgebundene Reports
+reproduzierbar. Zum exakten End-Zeitstempel bleibt eine Zeile ausstehend
+(`pending`); sie wird erst danach zum No-Show (`no_shows`).
 
-## Admin metrics
+## Admin-Metriken
 
-| Report | Definition |
+| Report-Befehl | Definition |
 |---|---|
-| `admin-reha-hours` | Current rows grouped by exposed Reha time window; includes duration and attendee-minutes |
-| `admin-course-months` | Sum of numeric monthly participation values plus number of courses with numeric data |
-| `admin-missing-signatures` | Count of current member rows and sum of the exposed `Menge` field |
+| `admin-reha-hours` | Aktuelle Zeilen gruppiert nach freigegebenem Reha-Zeitfenster; inkl. Dauer und Teilnehmer-Minuten |
+| `admin-course-months` | Summe numerischer monatlicher Teilnahmewerte plus Anzahl Kurse mit numerischen Daten |
+| `admin-missing-signatures` | Anzahl aktueller Mitgliedszeilen und Summe des freigegebenen Felds `Menge` |
 
-Admin domain reports use only records whose `last_observed_at` equals the
-current capability observation. Older distinct row versions remain in SQLite
-for history but do not inflate current reports.
+Admin-Domain-Reports nutzen nur Datensätze, deren `last_observed_at` der
+aktuellen Capability-Beobachtung entspricht. Ältere unterschiedliche
+Zeilenversionen bleiben in SQLite für die Historie, blähen aktuelle Reports
+aber nicht auf.
 
-`report capability NAME` applies the same latest-observation rule to every
-typed capability. The stored route is `capability:NAME`; dynamic member IDs,
-search text, dates and other submitted filter values are not included in that
-route key or command output.
+`report capability NAME` wendet dieselbe Regel der neuesten Beobachtung auf
+jede typisierte Capability an. Die gespeicherte Route ist `capability:NAME`;
+dynamische Mitglieds-IDs, Suchtext, Daten und andere übermittelte Filterwerte
+sind in diesem Route-Key und in der Befehlsausgabe nicht enthalten.
 
-## Provenance and retention
+## Herkunft und Aufbewahrung
 
-- `sync_runs` records source, normalized/schema fingerprint, start/completion,
-  status, and aggregate row counts.
-- mySIGN records retain stable remote IDs plus `source='mysign'`.
-- admin records retain an exact route or parameter-free capability key,
-  leaf-table index, deterministic row hash, structured JSON values, first
-  observation, and last observation.
-- admin capability fingerprints include routes, titles, headings, headers, and
-  sanitized form metadata; row values do not affect the fingerprint.
-- raw HTTP bodies, passwords, cookies, tokens, HTML files, and signature images
-  are not stored in SQLite.
+- `sync_runs` speichert Quelle, normalisierten/Schema-Fingerprint, Start/Abschluss,
+  Status und aggregierte Zeilenzahlen.
+- mySIGN-Datensätze behalten stabile Remote-IDs plus `source='mysign'`.
+- Admin-Datensätze behalten einen exakten Route- oder parameterfreien Capability-Key,
+  Leaf-Table-Index, deterministischen Zeilen-Hash, strukturierte JSON-Werte, erste
+  Beobachtung und letzte Beobachtung.
+- Admin-Capability-Fingerprints umfassen Routen, Titel, Überschriften, Header und
+  bereinigte Formular-Metadaten; Zeilenwerte beeinflussen den Fingerprint nicht.
+- Rohe HTTP-Bodies, Passwörter, Cookies, Tokens, HTML-Dateien und Unterschriftsbilder
+  werden nicht in SQLite gespeichert.

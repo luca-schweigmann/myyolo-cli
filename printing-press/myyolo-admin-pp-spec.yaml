@@ -1,8 +1,8 @@
 name: myyolo-admin
 description: |
-  Sanitized classic ASP administration contract used by myyolo-cli. The
-  production runtime follows redirects manually, keeps cookies in the OS
-  keyring, and permits only the exact read routes listed here.
+  Bereinigter klassischer ASP-Verwaltungsvertrag, den myyolo-cli nutzt. Die
+  Produktions-Runtime folgt Weiterleitungen manuell, hält Cookies im
+  OS-Schlüsselbund und erlaubt nur die hier gelisteten exakten Lese-Routen.
 version: "0.3.0"
 base_url: "https://www.azh-myyolo.info"
 spec_source: browser-sniffed
@@ -19,14 +19,14 @@ config:
 
 resources:
   session:
-    description: Establish an authorized classic ASP administration session.
+    description: Autorisierte klassische ASP-Verwaltungssitzung aufbauen.
     endpoints:
       login:
         method: POST
         path: "/Anmelden.asp?vw="
         description: |
-          Form-encoded login. The production CLI counts the observed
-          LoginHandler.asp and Start.asp redirect hops explicitly.
+          Form-kodiertes Login. Die Produktions-CLI zählt die beobachteten
+          Weiterleitungssprünge über LoginHandler.asp und Start.asp explizit.
         body:
           - name: PartnerNummer
             flag_name: partner-number
@@ -40,12 +40,12 @@ resources:
             flag_name: password
             type: string
             required: true
-            description: Sensitive; never accepted as a production CLI argument.
+            description: Sensibel; wird niemals als Produktions-CLI-Argument akzeptiert.
         response:
           type: string
 
   attendance:
-    description: Authorized, semantically read-only aggregate HTML pages.
+    description: Autorisierte, semantisch read-only aggregierte HTML-Seiten.
     endpoints:
       current:
         method: GET
@@ -69,7 +69,7 @@ resources:
           type: string
 
   statistics:
-    description: Authorized aggregate statistics and signature worklists.
+    description: Autorisierte Aggregatstatistiken und Unterschriften-Arbeitslisten.
     endpoints:
       course_participation_monthly:
         method: GET
@@ -83,7 +83,7 @@ resources:
           type: string
 
   courses:
-    description: Representative course controlling reads.
+    description: Repräsentative Kurscontrolling-Lesezugriffe.
     endpoints:
       definitions:
         method: GET
@@ -102,7 +102,7 @@ resources:
           type: string
 
   members:
-    description: Representative personal reads; production requires an explicit personal-data gate.
+    description: Repräsentative personenbezogene Lesezugriffe; Produktion verlangt eine explizite Personen-Daten-Freigabe.
     endpoints:
       detail:
         method: GET
@@ -126,7 +126,7 @@ resources:
           type: string
 
   prescriptions:
-    description: Representative health-data reads.
+    description: Repräsentative Gesundheitsdaten-Lesezugriffe.
     endpoints:
       remaining_units:
         method: POST
@@ -140,7 +140,7 @@ resources:
           type: string
 
   compliance:
-    description: Read-only billing-readiness checks; never submits a billing.
+    description: Read-only Abrechnungsbereitschaftsprüfungen; reicht niemals eine Abrechnung ein.
     endpoints:
       billing_number_mismatches:
         method: GET
@@ -149,7 +149,7 @@ resources:
           type: string
 
   financial:
-    description: Representative isolated financial read.
+    description: Repräsentativer isolierter finanzieller Lesezugriff.
     endpoints:
       completed_digital_archive:
         method: GET

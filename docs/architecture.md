@@ -1,124 +1,137 @@
-# Architecture
+# Architektur
 
-The CLI turns bounded, authorized reads from two related systems into durable
-local history and runs all analytics against that history.
+Die CLI wandelt begrenzte, autorisierte Reads aus zwei verwandten Systemen in
+dauerhafte lokale Historie um und führt alle Auswertungen gegen diese Historie
+aus.
 
 ```text
-one operator credential profile in the OS keyring
+ein Operator-Credential-Profil im OS-Schlüsselbund
                     |
           +---------+---------+
           |                   |
           v                   v
-  mySIGN JSON client     classic ASP admin client
-  rotating token         isolated cookie jar
-  <=3 requests           <=5 sync / <=10 discovery
-  >=1s serial            >=2s serial
+  mySIGN-JSON-Client     klassischer ASP-Admin-Client
+  rotierendes Token      isolierter Cookie-Jar
+  <=3 Anfragen           <=5 Sync / <=10 Discovery
+  >=1s seriell           >=2s seriell
           |                   |
-  strict JSON graph      99-route typed read catalogue
-                         bounded leaf-table parser
+  strikter JSON-Graph    typisierter 99-Routen-Read-Katalog
+                         begrenzter Leaf-Table-Parser
           |                   |
           +---------+---------+
                     v
-          private SQLite database
+          private SQLite-Datenbank
                     |
-          local-only reports
-          sensitivity details behind explicit flags
+          nur lokale Reports
+          Sensitivitätsdetails hinter expliziten Flags
 ```
 
-## Trust boundaries
+## Vertrauensgrenzen
 
-1. `internal/transport` is the final host/method/path/query gate. A POST is
-   never assumed to be a write or read from its verb; every exact route is
-   classified.
-2. `internal/readcatalog` is the typed source contract for one-capability
-   collections. It validates dates, IDs, weeks, enums, search length, IK
-   numbers, fixed query values and sensitivity before network access.
-3. `internal/secrets` owns one credential envelope and distinct `mysign` and
-   `admin` session envelopes in the platform keyring. Secret values never enter
-   logs, configuration files, command-line arguments, or SQLite.
-4. `internal/mysign` parses a strict graph. Missing attendance metrics,
-   duplicate identifiers, and unknown references fail closed.
-5. `internal/admin` disables automatic redirects, counts each ASP auth hop,
-   owns an isolated cookie jar, decodes the declared response charset, rejects
-   CAPTCHA/rate-limit/schema anomalies and non-HTML binary exports, and parses
-   bounded leaf tables.
-6. `internal/store` imports mySIGN graphs and structured admin observations.
-   Current admin reports join only the latest observation; older row versions
-   remain available as local history.
-7. `internal/output` renders local table, JSON, or CSV. Personal, health and
-   financial rows require distinct explicit data-scope flags.
+1. `internal/transport` ist das finale Gate für Host/Methode/Pfad/Query. Ein POST
+   wird niemals allein anhand des Verbs als Write oder Read angenommen; jede
+   exakte Route ist klassifiziert.
+2. `internal/readcatalog` ist der typisierte Quellenvertrag für Collections
+   mit genau einer Capability. Er validiert Daten, IDs, Wochen, Enums,
+   Suchlänge, IK-Nummern, feste Query-Werte und Sensitivität vor dem
+   Netzwerkzugriff.
+3. `internal/secrets` verwaltet einen Credential-Envelope sowie getrennte
+   `mysign`- und `admin`-Session-Envelopes im Plattform-Schlüsselbund.
+   Geheimwerte gelangen niemals in Logs, Konfigurationsdateien,
+   Kommandozeilenargumente oder SQLite.
+4. `internal/mysign` parst einen strikten Graphen. Fehlende
+   Anwesenheitsmetriken, doppelte Identifier und unbekannte Referenzen scheitern
+   fail-closed.
+5. `internal/admin` deaktiviert automatische Redirects, zählt jeden ASP-Auth-Hop,
+   besitzt einen isolierten Cookie-Jar, dekodiert den deklarierten
+   Antwort-Charset, lehnt CAPTCHA-/Rate-Limit-/Schema-Anomalien und nicht-HTML-
+   Binärexporte ab und parst begrenzte Leaf-Tabellen.
+6. `internal/store` importiert mySIGN-Graphen und strukturierte
+   Admin-Observations. Aktuelle Admin-Reports verknüpfen nur die neueste
+   Observation; ältere Zeilenversionen bleiben als lokale Historie verfügbar.
+7. `internal/output` rendert lokale Tabelle, JSON oder CSV. Personen-,
+   Gesundheits- und Finanzzeilen erfordern jeweils eigene explizite
+   Data-Scope-Flags.
 
-## mySIGN session state machine
+## mySIGN-Session-Zustandsmaschine
 
 ```text
-cached session?
-  +-- yes -> read
-  |          +-- success -> rotate token, persist, stop (1 request)
-  |          +-- expired -> login -> read once, stop (3 max)
-  |          +-- other error/schema drift -> stop
-  +-- no  -> login -> read once, stop (2 requests)
+gecachte Session?
+  +-- ja  -> Read
+  |          +-- Erfolg -> Token rotieren, persistieren, stop (1 Anfrage)
+  |          +-- abgelaufen -> Login -> einmal lesen, stop (max. 3)
+  |          +-- anderer Fehler/Schema-Drift -> stop
+  +-- nein -> Login -> einmal lesen, stop (2 Anfragen)
 ```
 
-There is no generic retry loop. A second failed read never causes another login. Concurrent callers in one process are serialized. The CLI does not schedule itself; users or an external scheduler control frequency.
+Es gibt keine generische Retry-Schleife. Ein zweiter fehlgeschlagener Read löst
+niemals ein weiteres Login aus. Gleichzeitige Aufrufer in einem Prozess werden
+serialisiert. Die CLI plant sich nicht selbst; Nutzer oder ein externer
+Scheduler steuern die Häufigkeit.
 
-## Admin session state machine
+## Admin-Session-Zustandsmaschine
 
 ```text
-cached admin cookies?
-  +-- yes -> exact session probe
-  |          +-- success -> read requested pages
-  |          +-- redirect to observed unauthenticated landing
-  |                        -> login once -> read once
-  |          +-- any other result -> stop
-  +-- no  -> login once -> read once
+gecachte Admin-Cookies?
+  +-- ja  -> exakter Session-Probe
+  |          +-- Erfolg -> angeforderte Seiten lesen
+  |          +-- Redirect zur beobachteten unauthentifizierten Einstiegsseite
+  |                        -> einmal Login -> einmal lesen
+  |          +-- jedes andere Ergebnis -> stop
+  +-- nein -> einmal Login -> einmal lesen
 ```
 
-The login flow is counted explicitly:
+Der Login-Flow wird explizit gezählt:
 
 ```text
 POST /Anmelden.asp?vw=
   -> GET /LoginHandler.asp
-  -> GET /Start.asp (or observed lowercase alias)
+  -> GET /Start.asp (oder beobachteter Kleinbuchstaben-Alias)
 ```
 
-`http.Client` never follows redirects automatically. Every hop passes the same
-allowlist, delay, and shared budget. A normal admin sync uses at most five
-requests; full discovery uses at most ten, including an expired-session probe.
-A typed collection reads exactly one capability with a maximum of five
-requests. All calls inside one operation are serial and at least two seconds
-apart.
+`http.Client` folgt Redirects niemals automatisch. Jeder Hop durchläuft dieselbe
+Allowlist, dieselbe Verzögerung und dasselbe gemeinsame Budget. Ein normaler
+Admin-Sync nutzt höchstens fünf Anfragen; vollständige Discovery höchstens zehn,
+einschließlich eines Probes bei abgelaufener Session. Eine typisierte Collection
+liest genau eine Capability mit maximal fünf Anfragen. Alle Aufrufe innerhalb
+einer Operation sind seriell und mindestens zwei Sekunden voneinander entfernt.
 
-## Persistence
+## Persistenz
 
-- `members`: source namespace, source ID, member number, local display identity.
-- `course_sessions`: dated course occurrences, room and time.
-- `prescriptions`: local prescription counters.
-- `attendance`: member/session/prescription links and attendance flags.
-- `admin_capabilities`: route/capability key, sanitized schema metadata and latest observation.
-- `admin_records`: route/table/row hash, structured values and observation range.
-- `sync_runs`: source fingerprint, status, timestamps and aggregate row counts.
+- `members`: Quell-Namespace, Quell-ID, Mitgliedsnummer, lokale Anzeigeidentität.
+- `course_sessions`: datierte Kursvorkommen, Raum und Zeit.
+- `prescriptions`: lokale Rezept-Zähler.
+- `attendance`: Mitglied/Session/Rezept-Verknüpfungen und Anwesenheitsflags.
+- `admin_capabilities`: Route-/Capability-Key, bereinigte Schema-Metadaten und neueste Observation.
+- `admin_records`: Route-/Tabellen-/Zeilen-Hash, strukturierte Werte und Observation-Range.
+- `sync_runs`: Quell-Fingerprint, Status, Zeitstempel und aggregierte Zeilenzahlen.
 
-mySIGN exposes a rolling snapshot. Rows are retained locally when they later
-disappear from that window. Admin row hashes preserve changed/removed versions
-while current reports filter to the latest capability observation. SQLite and
-WAL files are mode `0600`; operators should also use full-disk encryption, host
-access controls, and encrypted backups.
+mySIGN liefert einen rollierenden Snapshot. Zeilen bleiben lokal erhalten, wenn
+sie später aus diesem Fenster verschwinden. Admin-Zeilen-Hashes bewahren
+geänderte/entfernte Versionen, während aktuelle Reports auf die neueste
+Capability-Observation filtern. SQLite- und WAL-Dateien haben Mode `0600`;
+Betreiber sollten zusätzlich Vollplattenverschlüsselung, Host-Zugriffskontrollen
+und verschlüsselte Backups nutzen.
 
 ## Printing Press
 
-Two sanitized Printing Press specs record the observed mySIGN and representative
-admin contracts. The complete executable admin contract lives in the typed Go
-catalogue and is exportable with `myyolo catalog --format json`. Generated
-clients are not the runtime because the generator cannot encode rotating
-tokens, cookie isolation, manual redirect budgets, semantic-read POSTs,
-sensitivity gates, or fail-closed schema boundaries as one generated contract.
+Zwei bereinigte Printing-Press-Specs dokumentieren den beobachteten mySIGN- und
+einen repräsentativen Admin-Vertrag. Der vollständige ausführbare Admin-Vertrag
+liegt im typisierten Go-Katalog und ist mit `myyolo catalog --format json`
+exportierbar. Generierte Clients sind nicht die Runtime, weil der Generator
+rotierende Tokens, Cookie-Isolation, manuelle Redirect-Budgets, semantische
+Read-POSTs, Sensitivitäts-Gates oder fail-closed Schema-Grenzen nicht als einen
+generierten Vertrag abbilden kann.
 
-## Non-goals for version 1
+## Nicht-Ziele für Version 1
 
-- no Magicline integration or name-based cross-system matching;
-- no polling, daemon, cloud sync, hosted dashboard, or MCP server;
-- no myYOLO writes, signatures, course edits, documents or billing operations;
-- no CAPTCHA bypass, browser fingerprinting, proxy rotation or stealth behavior;
-- no member-detail crawling or fan-out collection;
-- no unclassified query or form submission;
-- no claim that course/Reha windows equal physical facility dwell time.
+- keine Magicline-Integration und kein namensbasiertes Cross-System-Matching;
+- kein Polling, Daemon, Cloud-Sync, gehostetes Dashboard oder MCP-Server;
+- keine myYOLO-Writes, Signaturen, Kursänderungen, Dokumente oder
+  Abrechnungsoperationen;
+- kein CAPTCHA-Bypass, Browser-Fingerprinting, Proxy-Rotation oder
+  Stealth-Verhalten;
+- kein Crawling von Mitgliederdetails und keine Fan-out-Collection;
+- keine unklassifizierte Query- oder Formular-Submission;
+- keine Behauptung, dass Kurs-/Reha-Fenster der physischen Aufenthaltsdauer in
+  der Einrichtung entsprechen.

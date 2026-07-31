@@ -1,48 +1,58 @@
-# Security policy
+# Sicherheitsrichtlinie
 
-## Supported versions
+## Unterstützte Versionen
 
-Security fixes are provided for the latest tagged release.
+Sicherheitskorrekturen gibt es für die neueste getaggte Version.
 
-## Reporting a vulnerability
+## Schwachstelle melden
 
-Do not open a public issue containing a vulnerability, credential, token, cookie, database, HAR file, member identity or attendance record. Use GitHub's private security-advisory flow for this repository.
+Öffne kein öffentliches Issue mit Schwachstelle, Zugangsdaten, Token, Cookie,
+Datenbank, HAR-Datei, Mitgliederidentität oder Anwesenheitsdatensatz. Nutze
+den privaten Security-Advisory-Ablauf von GitHub für dieses Repository.
 
-Include a minimal synthetic reproducer, affected version and expected impact. Replace all account and person data with invented values.
+Füge einen minimalen synthetischen Reproduktionsschritt, die betroffene
+Version und die erwartete Auswirkung bei. Ersetze alle Konten- und
+Personendaten durch erfundene Werte.
 
-## Operator responsibilities
+## Betreiberpflichten
 
-- Use only an account and data you are authorized to access.
-- Run the CLI on a trusted, patched host with full-disk encryption.
-- Treat the local database as health-adjacent personal data even when only
-  aggregate reports are normally displayed.
-- Restrict and encrypt backups of the local SQLite database.
-- Keep exported CSV/JSON reports out of shared folders and source control.
-- Do not weaken the two-second admin delay or increase the compiled request
-  ceilings. Stop after rate limits, CAPTCHA, auth anomalies, or schema drift.
-- Do not run overlapping collection processes. Prefer one selected `collect`
-  operation followed by any number of local reports.
-- Enable personal, health or financial collection/report flags only for the
-  authorized purpose and keep financial collection isolated from routine jobs.
-- Remove a local profile with `myyolo auth logout --profile NAME` when access
-  ends. This removes credentials plus the separate mySIGN/admin sessions from
-  the keyring, not the remote account.
+- Nutze nur ein Konto und Daten, auf die du zugreifen darfst.
+- Führe die CLI auf einem vertrauenswürdigen, gepatchten Host mit
+  Festplattenverschlüsselung aus.
+- Behandle die lokale Datenbank als gesundheitsnahe personenbezogene Daten,
+  auch wenn normalerweise nur aggregierte Berichte angezeigt werden.
+- Sichere und verschlüssele Backups der lokalen SQLite-Datenbank.
+- Halte exportierte CSV-/JSON-Berichte aus gemeinsamen Ordnern und der
+  Versionskontrolle heraus.
+- Schwäche die zweisekündige Admin-Verzögerung nicht und erhöhe die
+  kompilierten Anfrage-Obergrenzen nicht. Stoppe bei Rate-Limits, CAPTCHA,
+  Auth-Anomalien oder Schemaabweichungen.
+- Starte keine überlappenden Sammelprozesse. Bevorzuge genau eine ausgewählte
+  `collect`-Operation und danach beliebig viele lokale Berichte.
+- Aktiviere personenbezogene, gesundheitliche oder finanzielle
+  Sammel-/Berichtsflags nur für den freigegebenen Zweck und halte die
+  finanzielle Sammlung von Routinejobs getrennt.
+- Entferne ein lokales Profil mit `myyolo auth logout --profile NAME`, wenn der
+  Zugang endet. Das entfernt Zugangsdaten sowie die getrennten
+  mySIGN-/Admin-Sitzungen aus dem Schlüsselbund, nicht das entfernte Konto.
 
-## Local-data retention and deletion
+## Aufbewahrung und Löschung lokaler Daten
 
-The default database is
-`~/.local/share/myyolo-cli/myyolo.sqlite`. `MYYOLO_DB_PATH` or `--db` can select
-another path. Reports may create additional files wherever shell output is
-redirected.
+Die Standard-Datenbank ist
+`~/.local/share/myyolo-cli/myyolo.sqlite`. `MYYOLO_DB_PATH` oder `--db` können
+einen anderen Pfad wählen. Berichte können zusätzliche Dateien anlegen, wohin
+die Shell-Ausgabe umgeleitet wird.
 
-Before deleting a database, stop all CLI processes using it. Delete the exact
-database file and, when present beside it, its `-wal` and `-shm` companions.
-Delete exported CSV/JSON files and protected backups separately. This action is
-local and irreversible; it does not delete any source-system record.
+Stoppe vor dem Löschen einer Datenbank alle CLI-Prozesse, die sie nutzen.
+Lösche die exakte Datenbankdatei und, falls daneben vorhanden, die Begleiter
+`-wal` und `-shm`. Lösche exportierte CSV-/JSON-Dateien und geschützte Backups
+getrennt. Dieser Vorgang ist lokal und unumkehrbar; er löscht keinen Datensatz
+im Quellsystem.
 
-Choose a documented retention period suitable for the organization's
-authorization and legal basis. This project does not provide a background
-scheduler or automatic retention job.
+Wähle eine dokumentierte Aufbewahrungsfrist, die zur Freigabe und Rechtsgrundlage
+der Organisation passt. Dieses Projekt stellt keinen Hintergrundscheduler und
+keinen automatischen Aufbewahrungsjob bereit.
 
-The CLI intentionally has no telemetry, update beacon, cloud storage,
-background service, remote logout, or remote write route.
+Die CLI hat bewusst keine Telemetrie, keinen Update-Beacon, keinen
+Cloud-Speicher, keinen Hintergrunddienst, kein Remote-Logout und keine
+Remote-Schreibroute.

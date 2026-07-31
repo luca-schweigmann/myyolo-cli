@@ -11,9 +11,9 @@ import (
 
 var version = "dev"
 
-const usage = `myyolo - read-only myYOLO collector and reporting CLI
+const usage = `myyolo - nur lesende myYOLO-CLI für Datensammlung und Auswertung
 
-Usage:
+Verwendung:
   myyolo auth login [--profile NAME] [--source mysign|admin|all] --partner NUMBER --username USER [--password-stdin]
   myyolo auth check [--profile NAME] [--source mysign|admin|all] [--force-relogin]
   myyolo auth status [--profile NAME]
@@ -22,7 +22,7 @@ Usage:
   myyolo sync admin [--profile NAME] [--db PATH] [--delay 2s] [--request-budget 1..5]
   myyolo discover admin [--profile NAME] [--db PATH] [--delay 2s] [--request-budget 1..10]
   myyolo catalog [--group analytics|courses|members|prescriptions|compliance|financial] [--format table|json|csv]
-  myyolo collect CAPABILITY [filters] [--profile NAME] [--db PATH] [--delay 2s] [--request-budget 1..5]
+  myyolo collect CAPABILITY [Filter] [--profile NAME] [--db PATH] [--delay 2s] [--request-budget 1..5]
   myyolo db init [--db PATH]
   myyolo db status [--format table|json|csv] [--db PATH]
   myyolo doctor [--profile NAME] [--db PATH]
@@ -30,17 +30,17 @@ Usage:
   myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
   myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
   myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
-  myyolo report capability CAPABILITY [data-scope flags] [--format table|json|csv] [--db PATH]
-  myyolo report admin-reha-attendance|admin-missing-signature-members|admin-records --include-personal-data [data-scope flags] [--route EXACT_PATH] [--format table|json|csv] [--db PATH]
+  myyolo report capability CAPABILITY [Datenfreigaben] [--format table|json|csv] [--db PATH]
+  myyolo report admin-reha-attendance|admin-missing-signature-members|admin-records --include-personal-data [Datenfreigaben] [--route EXAKTER_PFAD] [--format table|json|csv] [--db PATH]
   myyolo version
 
-Credentials and cached sessions are stored in the operating-system keyring.
-The CLI never calls a myYOLO write endpoint. Collect runs are serial, delayed,
-limited to one capability and capped at five HTTP requests including relogin.`
+Zugangsdaten und zwischengespeicherte Sitzungen werden im Betriebssystem-Keyring gespeichert.
+Die CLI ruft niemals einen myYOLO-Schreib-Endpunkt auf. Collect-Läufe sind seriell, verzögert,
+auf eine Capability begrenzt und auf fünf HTTP-Anfragen inklusive Relogin gedeckelt.`
 
 func main() {
 	if err := run(context.Background(), os.Args[1:], os.Stdin, os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, "Fehler:", err)
 		os.Exit(1)
 	}
 }
@@ -112,7 +112,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 		_, err := fmt.Fprintln(stdout, buildVersion())
 		return err
 	}
-	return fmt.Errorf("unknown command\n\n%s", usage)
+	return fmt.Errorf("unbekannter Befehl\n\n%s", usage)
 }
 
 func buildVersion() string {
