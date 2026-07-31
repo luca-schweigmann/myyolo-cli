@@ -1,9 +1,10 @@
-# Printing Press transport
+# Printing-Press-Transport
 
-The sanitized, reproducible contracts live in
-[`myyolo-pp-spec.yaml`](myyolo-pp-spec.yaml) and
-[`myyolo-admin-pp-spec.yaml`](myyolo-admin-pp-spec.yaml). See
-[`contract.md`](contract.md) for the runtime boundary and dry-run command.
+Die bereinigten, reproduzierbaren Verträge liegen in
+[`myyolo-pp-spec.yaml`](myyolo-pp-spec.yaml) und
+[`myyolo-admin-pp-spec.yaml`](myyolo-admin-pp-spec.yaml). Siehe
+[`contract.md`](contract.md) für die Laufzeitgrenze und den Dry-Run-Befehl.
 
-No HAR, response sample, cookie, token, credential or generated tree belongs in
-this directory. The hard deny boundary stays in the hand-written runtime.
+In dieses Verzeichnis gehören keine HAR-Datei, kein Antwortbeispiel, kein
+Cookie, kein Token, keine Zugangsdaten und kein generierter Baum. Die harte
+Ablehnungsgrenze bleibt im handgeschriebenen Laufzeitcode.

@@ -99,7 +99,7 @@ func TestAdminCommandsRejectUnsafeDelayBeforeAccessingCredentials(t *testing.T) 
 			strings.NewReader(""),
 			&stdout,
 		)
-		if err == nil || !strings.Contains(err.Error(), "at least 2s") {
+		if err == nil || !strings.Contains(err.Error(), "mindestens 2s") {
 			t.Fatalf("args = %#v, error = %v", args, err)
 		}
 	}
@@ -275,7 +275,7 @@ func TestAuthLoginRejectsUnknownSourceBeforeReadingPassword(t *testing.T) {
 		strings.NewReader("should-not-be-read"),
 		io.Discard,
 	)
-	if err == nil || !strings.Contains(err.Error(), "--source must be") {
+	if err == nil || !strings.Contains(err.Error(), "--source muss") {
 		t.Fatalf("error = %v", err)
 	}
 }

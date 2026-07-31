@@ -58,17 +58,17 @@ func addDataScopeFlags(flags *flag.FlagSet) dataScopeFlags {
 		personal: flags.Bool(
 			"include-personal-data",
 			false,
-			"allow member names and identifiers",
+			"Mitgliedsnamen und -kennungen erlauben",
 		),
 		health: flags.Bool(
 			"include-health-data",
 			false,
-			"allow Reha, prevention and prescription data",
+			"Reha-, Präventions- und Verordnungsdaten erlauben",
 		),
 		financial: flags.Bool(
 			"include-financial-data",
 			false,
-			"allow bank and billing data",
+			"Bank- und Abrechnungsdaten erlauben",
 		),
 	}
 }
@@ -79,35 +79,35 @@ func (scope dataScopeFlags) authorize(sensitivity readcatalog.Sensitivity) error
 		return nil
 	case readcatalog.Personal:
 		if !*scope.personal {
-			return errors.New("this capability requires --include-personal-data")
+			return errors.New("diese Capability erfordert --include-personal-data")
 		}
 	case readcatalog.Health:
 		if !*scope.personal || !*scope.health {
 			return errors.New(
-				"this capability requires --include-personal-data and --include-health-data",
+				"diese Capability erfordert --include-personal-data und --include-health-data",
 			)
 		}
 	case readcatalog.Financial:
 		if !*scope.personal || !*scope.financial {
 			return errors.New(
-				"this capability requires --include-personal-data and --include-financial-data",
+				"diese Capability erfordert --include-personal-data und --include-financial-data",
 			)
 		}
 	default:
-		return fmt.Errorf("unsupported sensitivity %q", sensitivity)
+		return fmt.Errorf("nicht unterstützte Sensitivität %q", sensitivity)
 	}
 	return nil
 }
 
 func printCatalog(args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("catalog", flag.ContinueOnError)
-	group := flags.String("group", "", "limit the local catalogue to one group")
-	format := flags.String("format", "table", "table, json or csv")
+	group := flags.String("group", "", "lokalen Katalog auf eine Gruppe begrenzen")
+	format := flags.String("format", "table", "table, json oder csv")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
-		return errors.New("catalog does not accept positional arguments")
+		return errors.New("catalog akzeptiert keine Positionsargumente")
 	}
 	var rows []catalogRow
 	for _, capability := range readcatalog.List() {
@@ -117,7 +117,7 @@ func printCatalog(args []string, stdout io.Writer) error {
 		rows = append(rows, catalogRowFor(capability))
 	}
 	if len(rows) == 0 && *group != "" {
-		return fmt.Errorf("unknown or empty capability group %q", *group)
+		return fmt.Errorf("unbekannte oder leere Capability-Gruppe %q", *group)
 	}
 	return output.Write(stdout, rows, *format)
 }
@@ -170,30 +170,30 @@ func collectCapability(
 	stdout io.Writer,
 ) error {
 	flags := flag.NewFlagSet("collect "+name, flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
-	delay := flags.Duration("delay", admin.DefaultDelay, "minimum delay between admin requests")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
+	delay := flags.Duration("delay", admin.DefaultDelay, "Mindestverzögerung zwischen Admin-Anfragen")
 	requestBudget := flags.Int(
 		"request-budget",
 		admin.DefaultFetchBudget,
-		"maximum requests including session probe, login and relogin",
+		"maximale Anfragen inklusive Sitzungsprüfung, Login und Relogin",
 	)
-	format := flags.String("format", "json", "table, json or csv")
-	dryRun := flags.Bool("dry-run", false, "validate locally without credentials or HTTP")
+	format := flags.String("format", "json", "table, json oder csv")
+	dryRun := flags.Bool("dry-run", false, "lokal validieren ohne Zugangsdaten oder HTTP")
 	scope := addDataScopeFlags(flags)
 	values := addCapabilityValueFlags(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
-		return errors.New("collect accepts exactly one capability and no extra positional arguments")
+		return errors.New("collect akzeptiert genau eine Capability und keine zusätzlichen Positionsargumente")
 	}
 	if *delay < admin.DefaultDelay {
-		return fmt.Errorf("--delay must be at least %s", admin.DefaultDelay)
+		return fmt.Errorf("--delay muss mindestens %s betragen", admin.DefaultDelay)
 	}
 	if *requestBudget < 1 || *requestBudget > admin.DefaultFetchBudget {
 		return fmt.Errorf(
-			"--request-budget must be between 1 and %d for collect",
+			"--request-budget muss für collect zwischen 1 und %d liegen",
 			admin.DefaultFetchBudget,
 		)
 	}
@@ -225,7 +225,7 @@ func collectCapability(
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("profile %q is not configured; run myyolo auth login", *profile)
+			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
 		}
 		return err
 	}
@@ -266,20 +266,20 @@ func addCapabilityValueFlags(flags *flag.FlagSet) func() map[string]string {
 		name        string
 		description string
 	}{
-		{"from", "range start (YYYY-MM-DD)"},
-		{"to", "range end (YYYY-MM-DD)"},
-		{"date", "single date (YYYY-MM-DD)"},
-		{"year", "calendar year"},
-		{"week-from", "first ISO week"},
-		{"week-to", "last ISO week"},
-		{"threshold", "non-negative threshold"},
-		{"member-id", "positive member identifier"},
-		{"course-id", "positive course identifier"},
-		{"planner", "planner mode"},
-		{"population", "member-search population"},
-		{"search", "member-search text"},
-		{"referrer-id", "optional referrer identifier"},
-		{"ik", "nine-digit institution code"},
+		{"from", "Bereichsbeginn (YYYY-MM-DD)"},
+		{"to", "Bereichsende (YYYY-MM-DD)"},
+		{"date", "einzelnes Datum (YYYY-MM-DD)"},
+		{"year", "Kalenderjahr"},
+		{"week-from", "erste ISO-Woche"},
+		{"week-to", "letzte ISO-Woche"},
+		{"threshold", "nichtnegativer Schwellenwert"},
+		{"member-id", "positive Mitgliederkennung"},
+		{"course-id", "positive Kurskennung"},
+		{"planner", "Planungsmodus"},
+		{"population", "Mitglieder-Suchpopulation"},
+		{"search", "Mitglieder-Suchtext"},
+		{"referrer-id", "optionale Zuweiserkennung"},
+		{"ik", "neunstellige Institutionskennzahl"},
 	} {
 		values[item.name] = flags.String(item.name, "", item.description)
 	}
@@ -302,17 +302,17 @@ func printCapabilityReport(
 ) error {
 	capability, ok := readcatalog.Lookup(name)
 	if !ok {
-		return fmt.Errorf("unknown capability %q", name)
+		return fmt.Errorf("unbekannte Capability %q", name)
 	}
 	flags := flag.NewFlagSet("report capability "+name, flag.ContinueOnError)
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
-	format := flags.String("format", "table", "table, json or csv")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
+	format := flags.String("format", "table", "table, json oder csv")
 	scope := addDataScopeFlags(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
-		return errors.New("report capability accepts one capability and no extra arguments")
+		return errors.New("report capability akzeptiert eine Capability und keine zusätzlichen Argumente")
 	}
 	if err := scope.authorize(capability.Sensitivity); err != nil {
 		return err

@@ -27,11 +27,11 @@ import (
 
 func authLogin(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) error {
 	flags := flag.NewFlagSet("auth login", flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
-	partner := flags.String("partner", "", "myYOLO partner number")
-	username := flags.String("username", "", "myYOLO username")
-	passwordStdin := flags.Bool("password-stdin", false, "read password from standard input")
-	source := flags.String("source", "all", "authenticate mysign, admin or all")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
+	partner := flags.String("partner", "", "myYOLO-Partnernummer")
+	username := flags.String("username", "", "myYOLO-Benutzername")
+	passwordStdin := flags.Bool("password-stdin", false, "Passwort von der Standardeingabe lesen")
+	source := flags.String("source", "all", "mysign, admin oder all authentifizieren")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -39,10 +39,10 @@ func authLogin(ctx context.Context, args []string, stdin io.Reader, stdout io.Wr
 		return err
 	}
 	if *source != "mysign" && *source != "admin" && *source != "all" {
-		return errors.New("--source must be mysign, admin or all")
+		return errors.New("--source muss mysign, admin oder all sein")
 	}
 	if *partner == "" || *username == "" {
-		return errors.New("--partner and --username are required")
+		return errors.New("--partner und --username sind erforderlich")
 	}
 	password, err := readPassword(stdin, stdout, *passwordStdin)
 	if err != nil {
@@ -101,7 +101,7 @@ func authLogin(ctx context.Context, args []string, stdin io.Reader, stdout io.Wr
 
 func authStatus(args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("auth status", flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ func authStatus(args []string, stdout io.Writer) error {
 
 func authLogout(args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("auth logout", flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -148,8 +148,8 @@ func authLogout(args []string, stdout io.Writer) error {
 
 func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("sync", flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("profile %q is not configured; run myyolo auth login", *profile)
+			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
 		}
 		return err
 	}
@@ -179,7 +179,7 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 	}
 	data, err := json.Marshal(snapshot)
 	if err != nil {
-		return fmt.Errorf("hash normalized snapshot: %w", err)
+		return fmt.Errorf("normalisierten Snapshot hashen: %w", err)
 	}
 	hash := sha256.Sum256(data)
 	db, err := store.Open(ctx, *dbPath)
@@ -196,23 +196,23 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 
 func syncAdmin(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("sync admin", flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
-	delay := flags.Duration("delay", admin.DefaultDelay, "minimum delay between admin requests")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
+	delay := flags.Duration("delay", admin.DefaultDelay, "Mindestverzögerung zwischen Admin-Anfragen")
 	requestBudget := flags.Int(
 		"request-budget",
 		admin.DefaultFetchBudget,
-		"maximum requests including login and relogin",
+		"maximale Anfragen inklusive Login und Relogin",
 	)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *delay < admin.DefaultDelay {
-		return fmt.Errorf("--delay must be at least %s", admin.DefaultDelay)
+		return fmt.Errorf("--delay muss mindestens %s betragen", admin.DefaultDelay)
 	}
 	if *requestBudget < 1 || *requestBudget > admin.DefaultFetchBudget {
 		return fmt.Errorf(
-			"--request-budget must be between 1 and %d for sync admin",
+			"--request-budget muss für sync admin zwischen 1 und %d liegen",
 			admin.DefaultFetchBudget,
 		)
 	}
@@ -220,7 +220,7 @@ func syncAdmin(ctx context.Context, args []string, stdout io.Writer) error {
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("profile %q is not configured; run myyolo auth login", *profile)
+			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
 		}
 		return err
 	}
@@ -257,23 +257,23 @@ func syncAdmin(ctx context.Context, args []string, stdout io.Writer) error {
 
 func discoverAdmin(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("discover admin", flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
-	delay := flags.Duration("delay", admin.DefaultDelay, "minimum delay between admin requests")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
+	delay := flags.Duration("delay", admin.DefaultDelay, "Mindestverzögerung zwischen Admin-Anfragen")
 	requestBudget := flags.Int(
 		"request-budget",
 		admin.MaxRequestBudget,
-		"maximum requests including login and relogin",
+		"maximale Anfragen inklusive Login und Relogin",
 	)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *delay < admin.DefaultDelay {
-		return fmt.Errorf("--delay must be at least %s", admin.DefaultDelay)
+		return fmt.Errorf("--delay muss mindestens %s betragen", admin.DefaultDelay)
 	}
 	if *requestBudget < 1 || *requestBudget > admin.MaxRequestBudget {
 		return fmt.Errorf(
-			"--request-budget must be between 1 and %d for discover admin",
+			"--request-budget muss für discover admin zwischen 1 und %d liegen",
 			admin.MaxRequestBudget,
 		)
 	}
@@ -281,7 +281,7 @@ func discoverAdmin(ctx context.Context, args []string, stdout io.Writer) error {
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("profile %q is not configured; run myyolo auth login", *profile)
+			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
 		}
 		return err
 	}
@@ -327,24 +327,24 @@ func discoverAdmin(ctx context.Context, args []string, stdout io.Writer) error {
 
 func authCheck(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("auth check", flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
-	source := flags.String("source", "all", "check mysign, admin or all")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
+	source := flags.String("source", "all", "mysign, admin oder all prüfen")
 	forceRelogin := flags.Bool(
 		"force-relogin",
 		false,
-		"ignore cached sessions and verify one autonomous login flow",
+		"zwischengespeicherte Sitzungen ignorieren und einen autonomen Login-Ablauf prüfen",
 	)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *source != "mysign" && *source != "admin" && *source != "all" {
-		return errors.New("--source must be mysign, admin or all")
+		return errors.New("--source muss mysign, admin oder all sein")
 	}
 	secretStore := secrets.NewKeyringStore()
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("profile %q is not configured; run myyolo auth login", *profile)
+			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
 		}
 		return err
 	}
@@ -412,7 +412,7 @@ func authCheck(ctx context.Context, args []string, stdout io.Writer) error {
 
 func initDB(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("db init", flag.ContinueOnError)
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -429,8 +429,8 @@ func initDB(ctx context.Context, args []string, stdout io.Writer) error {
 
 func dbStatus(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("db status", flag.ContinueOnError)
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
-	format := flags.String("format", "json", "table, json or csv")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
+	format := flags.String("format", "json", "table, json oder csv")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -448,8 +448,8 @@ func dbStatus(ctx context.Context, args []string, stdout io.Writer) error {
 
 func doctor(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	profile := flags.String("profile", "default", "credential profile")
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
+	profile := flags.String("profile", "default", "Zugangsdaten-Profil")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -490,17 +490,17 @@ func doctor(ctx context.Context, args []string, stdout io.Writer) error {
 
 func importMySign(ctx context.Context, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("import mysign", flag.ContinueOnError)
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
-	filePath := flags.String("file", "", "mySIGN GetListData JSON file")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
+	filePath := flags.String("file", "", "mySIGN-GetListData-JSON-Datei")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *filePath == "" {
-		return errors.New("--file is required")
+		return errors.New("--file ist erforderlich")
 	}
 	data, err := os.ReadFile(*filePath)
 	if err != nil {
-		return fmt.Errorf("read input: %w", err)
+		return fmt.Errorf("Eingabe lesen: %w", err)
 	}
 	snapshot, err := mysign.Parse(data)
 	if err != nil {
@@ -521,24 +521,24 @@ func importMySign(ctx context.Context, args []string, stdout io.Writer) error {
 
 func printReport(ctx context.Context, reportName string, args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("report "+reportName, flag.ContinueOnError)
-	dbPath := flags.String("db", defaultDBPath(), "SQLite database path")
-	format := flags.String("format", "table", "table, json or csv")
-	asOfValue := flags.String("as-of", "", "RFC3339 evaluation time (default: now)")
-	route := flags.String("route", "", "limit admin records to one exact route")
+	dbPath := flags.String("db", defaultDBPath(), "Pfad zur SQLite-Datenbank")
+	format := flags.String("format", "table", "table, json oder csv")
+	asOfValue := flags.String("as-of", "", "Auswertungszeitpunkt im RFC3339-Format (Standard: jetzt)")
+	route := flags.String("route", "", "Admin-Datensätze auf eine exakte Route begrenzen")
 	includePersonalData := flags.Bool(
 		"include-personal-data",
 		false,
-		"allow member names and identifiers in local output",
+		"Mitgliedsnamen und -kennungen in lokaler Ausgabe erlauben",
 	)
 	includeHealthData := flags.Bool(
 		"include-health-data",
 		false,
-		"allow Reha, prevention and prescription data in local output",
+		"Reha-, Präventions- und Verordnungsdaten in lokaler Ausgabe erlauben",
 	)
 	includeFinancialData := flags.Bool(
 		"include-financial-data",
 		false,
-		"allow bank and billing data in local output",
+		"Bank- und Abrechnungsdaten in lokaler Ausgabe erlauben",
 	)
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -552,7 +552,7 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 	if *asOfValue != "" {
 		asOf, err = time.Parse(time.RFC3339, *asOfValue)
 		if err != nil {
-			return fmt.Errorf("--as-of must be RFC3339: %w", err)
+			return fmt.Errorf("--as-of muss RFC3339 sein: %w", err)
 		}
 	}
 
@@ -570,7 +570,7 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 		report, err = db.SessionsAt(ctx, asOf)
 	case "members":
 		if !*includePersonalData {
-			return errors.New("member report requires --include-personal-data")
+			return errors.New("Mitgliederbericht erfordert --include-personal-data")
 		}
 		report, err = db.MembersAt(ctx, asOf)
 	case "admin-capabilities":
@@ -583,17 +583,17 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 		report, err = db.AdminMissingSignatures(ctx)
 	case "admin-reha-attendance":
 		if !*includePersonalData {
-			return errors.New("admin Reha attendance report requires --include-personal-data")
+			return errors.New("Admin-Reha-Anwesenheitsbericht erfordert --include-personal-data")
 		}
 		report, err = db.AdminRehaAttendanceDetails(ctx)
 	case "admin-missing-signature-members":
 		if !*includePersonalData {
-			return errors.New("admin missing-signature member report requires --include-personal-data")
+			return errors.New("Admin-Bericht zu fehlenden Unterschriften erfordert --include-personal-data")
 		}
 		report, err = db.AdminMissingSignatureDetails(ctx)
 	case "admin-records":
 		if !*includePersonalData {
-			return errors.New("admin record report requires --include-personal-data")
+			return errors.New("Admin-Datensatzbericht erfordert --include-personal-data")
 		}
 		scope := dataScopeFlags{
 			personal:  includePersonalData,
@@ -603,8 +603,8 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 		if *route == "" {
 			if !*includeHealthData || !*includeFinancialData {
 				return errors.New(
-					"unfiltered admin records require --include-personal-data, " +
-						"--include-health-data and --include-financial-data",
+					"ungefilterte Admin-Datensätze erfordern --include-personal-data, " +
+						"--include-health-data und --include-financial-data",
 				)
 			}
 		} else if sensitivity, ok := readcatalog.SensitivityForStoredRoute(*route); ok {
@@ -612,11 +612,11 @@ func printReport(ctx context.Context, reportName string, args []string, stdout i
 				return err
 			}
 		} else if !*includeHealthData || !*includeFinancialData {
-			return errors.New("an unclassified admin route requires all data-scope flags")
+			return errors.New("eine unklassifizierte Admin-Route erfordert alle data-scope-Flags")
 		}
 		report, err = db.AdminRecords(ctx, *route)
 	default:
-		return fmt.Errorf("unknown report %q", reportName)
+		return fmt.Errorf("unbekannter Bericht %q", reportName)
 	}
 	if err != nil {
 		return err
@@ -628,28 +628,28 @@ func readPassword(stdin io.Reader, stdout io.Writer, fromStdin bool) (string, er
 	if fromStdin {
 		data, err := io.ReadAll(io.LimitReader(stdin, 4097))
 		if err != nil {
-			return "", fmt.Errorf("read password: %w", err)
+			return "", fmt.Errorf("Passwort lesen: %w", err)
 		}
 		if len(data) > 4096 {
-			return "", errors.New("password input is too long")
+			return "", errors.New("Passworteingabe ist zu lang")
 		}
 		password := strings.TrimRight(string(data), "\r\n")
 		if password == "" {
-			return "", errors.New("password is empty")
+			return "", errors.New("Passwort ist leer")
 		}
 		return password, nil
 	}
 	if configured := os.Getenv("MYYOLO_PASSWORD"); configured != "" {
 		if len(configured) > 4096 {
-			return "", errors.New("MYYOLO_PASSWORD is too long")
+			return "", errors.New("MYYOLO_PASSWORD ist zu lang")
 		}
 		return configured, nil
 	}
 	file, ok := stdin.(*os.File)
 	if !ok || !term.IsTerminal(int(file.Fd())) {
-		return "", errors.New("interactive password prompt requires a terminal; use --password-stdin")
+		return "", errors.New("interaktive Passwortabfrage erfordert ein Terminal; nutze --password-stdin")
 	}
-	if _, err := fmt.Fprint(stdout, "Password: "); err != nil {
+	if _, err := fmt.Fprint(stdout, "Passwort: "); err != nil {
 		return "", err
 	}
 	data, err := term.ReadPassword(int(file.Fd()))
@@ -657,10 +657,10 @@ func readPassword(stdin io.Reader, stdout io.Writer, fromStdin bool) (string, er
 		err = printErr
 	}
 	if err != nil {
-		return "", fmt.Errorf("read password: %w", err)
+		return "", fmt.Errorf("Passwort lesen: %w", err)
 	}
 	if len(data) == 0 {
-		return "", errors.New("password is empty")
+		return "", errors.New("Passwort ist leer")
 	}
 	return string(data), nil
 }

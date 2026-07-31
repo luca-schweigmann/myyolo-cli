@@ -1,17 +1,21 @@
-# Contributing
+# Mitwirken
 
-Use Go 1.26.5 or newer and run `make check`.
+Verwende Go 1.26.5 oder neuer und führe `make check` aus.
 
-Changes to the network boundary must include tests proving the exact
-method/host/path/query allowlist, source-specific session isolation, request
-budget, delay and one-time re-login sequence. Never add a remote write route,
-unclassified form submission, member-detail fan-out, CAPTCHA handling, or
-rate-limit bypass. Every typed collection must remain one capability per run
-with a five-request hard ceiling.
+Änderungen an der Netzwerkgrenze brauchen Tests für die exakte Allowlist aus
+Methode, Host, Pfad und Query, die quellenspezifische Sitzungstrennung, das
+Abfragebudget, den Abstand und den einmaligen erneuten Login. Füge keine
+schreibende Serverroute, nicht klassifizierte Formularübermittlung,
+automatisierte Mitglieder-Detailabfragen, CAPTCHA-Behandlung oder Umgehung von
+Rate Limits hinzu. Jede typisierte Sammlung bleibt auf eine Funktion pro Lauf
+und höchstens fünf Abfragen begrenzt.
 
-Use only synthetic fixtures. Do not commit or attach credentials, tokens, cookies, raw responses, HAR files, SQLite databases, screenshots or exports that contain real people.
+Verwende ausschließlich synthetische Testdaten. Zugangsdaten, Tokens, Cookies,
+rohe Antworten, HAR-Dateien, SQLite-Datenbanken, Screenshots oder Exporte mit
+echten Personen dürfen weder eingecheckt noch angehängt werden.
 
-Printing Press changes must keep both contracts green:
+Bei Änderungen an Printing Press müssen beide Verträge weiterhin erfolgreich
+geprüft werden:
 
 ```bash
 cli-printing-press generate \

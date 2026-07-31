@@ -1,38 +1,40 @@
-# Printing Press contract
+# Printing-Press-Vertrag
 
-The specs record the two observed source contracts:
+Die Specs dokumentieren die beiden beobachteten Quellverträge:
 
-- `myyolo-pp-spec.yaml`: mySIGN JSON login and rotating snapshot.
-- `myyolo-admin-pp-spec.yaml`: classic ASP login and representative HTML reads
-  from all six read-catalogue groups.
+- `myyolo-pp-spec.yaml`: mySIGN-JSON-Login und rotierender Snapshot.
+- `myyolo-admin-pp-spec.yaml`: klassisches ASP-Login und repräsentative
+  HTML-Lesezugriffe aus allen sechs Lese-Kataloggruppen.
 
-They contain no credentials, cookies, tokens, member records, captured
-responses, or HAR files.
+Sie enthalten keine Zugangsdaten, Cookies, Tokens, Mitgliederdatensätze,
+erfassten Antworten oder HAR-Dateien.
 
-Printing Press is used here as a reproducible contract and generator check, not
-as the runtime security boundary. Version 4.22.1 classifies the two `POST`
-operations syntactically as create-style commands and cannot express all of
-these runtime invariants in the generated client:
+Printing Press dient hier als reproduzierbarer Vertrags- und Generator-Check,
+nicht als Laufzeit-Sicherheitsgrenze. Version 4.22.1 stuft die beiden `POST`-
+Operationen syntaktisch als create-ähnliche Befehle ein und kann nicht alle
+dieser Runtime-Invarianten im generierten Client ausdrücken:
 
-- `POST /Home/GetListData` is semantically read-only;
-- only the two classified mySIGN host/method/path combinations may leave the
-  mySIGN transport;
-- passwords belong in the operating-system keyring;
-- a mySIGN sync may make at most three requests;
-- an expired session causes exactly one re-login;
-- a schema change must stop without re-authentication;
-- the admin client must count redirects manually, wait at least two seconds,
-  share a maximum five-request one-capability budget, and never provide a
-  `collect all` operation;
-- personal, health and financial capabilities need separate explicit gates;
-- mySIGN and admin sessions must never share a keyring account or cookie jar;
-- all other myYOLO routes are denied.
+- `POST /Home/GetListData` ist semantisch schreibgeschützt;
+- nur die beiden klassifizierten mySIGN-Kombinationen aus Host, Methode und
+  Pfad dürfen den mySIGN-Transport verlassen;
+- Passwörter gehören in den Schlüsselbund des Betriebssystems;
+- ein mySIGN-Sync darf höchstens drei Anfragen stellen;
+- eine abgelaufene Sitzung löst genau einen erneuten Login aus;
+- eine Schemaänderung muss ohne erneute Authentifizierung stoppen;
+- der Admin-Client muss Weiterleitungen manuell zählen, mindestens zwei
+  Sekunden warten, ein Budget von maximal fünf Anfragen pro Fähigkeit teilen
+  und niemals eine `collect all`-Operation bereitstellen;
+- personenbezogene, gesundheitliche und finanzielle Fähigkeiten brauchen
+  getrennte explizite Freigaben;
+- mySIGN- und Admin-Sitzungen dürfen niemals denselben Schlüsselbund-Account
+  oder Cookie-Jar teilen;
+- alle anderen myYOLO-Routen sind gesperrt.
 
-The hand-written packages under `internal/transport` and `internal/secrets`
-therefore remain authoritative. A generated tree may be used for comparison,
-but is deliberately not committed or executed against a live account.
+Die handgeschriebenen Pakete unter `internal/transport` und `internal/secrets`
+bleiben deshalb maßgeblich. Ein generierter Baum darf zum Vergleich dienen,
+wird aber bewusst weder versioniert noch gegen ein Live-Konto ausgeführt.
 
-## Reproduce
+## Reproduzieren
 
 ```bash
 cli-printing-press generate \
@@ -48,10 +50,11 @@ cli-printing-press generate \
   --dry-run
 ```
 
-Both dry runs must parse without credentials or live traffic.
+Beide Dry-Runs müssen ohne Zugangsdaten und ohne Live-Datenverkehr parsen.
 
-The specs are sanitized interoperability fixtures. The authoritative complete
-list of 99 classified runtime capabilities is exported locally with:
+Die Specs sind bereinigte Interoperabilitäts-Fixtures. Die maßgebliche
+vollständige Liste der 99 klassifizierten Runtime-Fähigkeiten wird lokal
+exportiert mit:
 
 ```bash
 myyolo catalog --format json
