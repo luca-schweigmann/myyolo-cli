@@ -13,6 +13,58 @@ import (
 	"github.com/luca-schweigmann/myyolo-cli/internal/mysign"
 )
 
+func TestSqliteFileURIUsesPOSIXFileFormOnWindowsPaths(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{
+			in:   "/tmp/myyolo.sqlite",
+			want: "file:///tmp/myyolo.sqlite",
+		},
+		{
+			in:   `C:\Users\user\AppData\Local\POINT\myyolo\point-reha.sqlite`,
+			want: "file:///C:/Users/user/AppData/Local/POINT/myyolo/point-reha.sqlite",
+		},
+		{
+			in:   "C:/Users/user/AppData/Local/POINT/myyolo/point-reha.sqlite",
+			want: "file:///C:/Users/user/AppData/Local/POINT/myyolo/point-reha.sqlite",
+		},
+		{
+			in:   `C:\Users\My Docs\point-reha.sqlite`,
+			want: "file:///C:/Users/My%20Docs/point-reha.sqlite",
+		},
+	}
+	for _, tc := range cases {
+		got := sqliteFileURI(tc.in)
+		if got != tc.want {
+			t.Fatalf("sqliteFileURI(%q)=%q want %q", tc.in, got, tc.want)
+		}
+		if strings.Contains(got, "%5C") {
+			t.Fatalf("sqliteFileURI(%q) still encodes backslashes: %q", tc.in, got)
+		}
+		if strings.HasPrefix(got, "file://C:") {
+			t.Fatalf("sqliteFileURI(%q) used drive letter as URI authority: %q", tc.in, got)
+		}
+	}
+
+	dsn := sqliteDSN(`C:\Users\user\AppData\Local\POINT\myyolo\point-reha.sqlite`)
+	wantPrefix := "file:///C:/Users/user/AppData/Local/POINT/myyolo/point-reha.sqlite?"
+	if !strings.HasPrefix(dsn, wantPrefix) {
+		t.Fatalf("sqliteDSN prefix=%q want prefix %q", dsn, wantPrefix)
+	}
+	for _, pragma := range []string{
+		"_pragma=journal_mode(WAL)",
+		"_pragma=synchronous(NORMAL)",
+		"_pragma=foreign_keys(ON)",
+		"_pragma=busy_timeout(5000)",
+	} {
+		if !strings.Contains(dsn, pragma) {
+			t.Fatalf("sqliteDSN missing %s: %q", pragma, dsn)
+		}
+	}
+}
+
 func TestImportIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	data, err := os.ReadFile(filepath.Join("..", "mysign", "testdata", "get_list_data.synthetic.json"))

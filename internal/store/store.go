@@ -222,12 +222,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, fmt.Errorf("close database file: %w", err)
 	}
 
-	dsn := (&url.URL{Scheme: "file", Path: absolute}).String() +
-		"?_pragma=journal_mode(WAL)" +
-		"&_pragma=synchronous(NORMAL)" +
-		"&_pragma=foreign_keys(ON)" +
-		"&_pragma=busy_timeout(5000)"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", sqliteDSN(absolute))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -252,6 +247,25 @@ func (store *Store) Close() error {
 		return closeErr
 	}
 	return modeErr
+}
+
+// sqliteFileURI builds a SQLite-compatible file URI from an absolute OS path.
+// Windows paths must become file:///C:/...; url.URL{Scheme:"file", Path: `C:\...`}
+// incorrectly yields file://C:%5C... and SQLite rejects that as invalid URI authority.
+func sqliteFileURI(absolutePath string) string {
+	p := strings.ReplaceAll(absolutePath, `\`, `/`)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
+}
+
+func sqliteDSN(absolutePath string) string {
+	return sqliteFileURI(absolutePath) +
+		"?_pragma=journal_mode(WAL)" +
+		"&_pragma=synchronous(NORMAL)" +
+		"&_pragma=foreign_keys(ON)" +
+		"&_pragma=busy_timeout(5000)"
 }
 
 func (store *Store) Status(ctx context.Context) (DatabaseStatus, error) {
