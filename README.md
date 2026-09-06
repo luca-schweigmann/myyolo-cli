@@ -27,6 +27,7 @@ Berechtigung und im Rahmen der Vereinbarung, die für deinen Zugang gilt.
 | Genau eine ausgewählte Admin-Funktion abrufen | `myyolo collect CAPABILITY` | 2 bis 5 |
 | Letzten Snapshot einer Funktion lokal ausgeben | `myyolo report capability CAPABILITY` | 0 |
 | Leere lokale Datenbank anlegen | `myyolo db init` | 0 |
+| Vorhandene SQLite-Quelle konsistent privat snapshotten | `myyolo db snapshot` | 0 |
 | Datenbankintegrität und Gesamtstatus prüfen | `myyolo db status` | 0 |
 | Schlüsselbund und Datenbank prüfen | `myyolo doctor` | 0 |
 | Lokalen Snapshot offline importieren | `myyolo import mysign` | 0 |
@@ -40,12 +41,111 @@ Berechtigung und im Rahmen der Vereinbarung, die für deinen Zugang gilt.
 | Reha-Zeitfenster und Dauer auswerten | `myyolo report admin-reha-hours` | 0 |
 | Monatliche Kursteilnahme auswerten | `myyolo report admin-course-months` | 0 |
 | Fehlende Reha-Unterschriften zählen | `myyolo report admin-missing-signatures` | 0 |
+| Reha-Termine als sichere Aggregate auswerten | `myyolo report reha-sessions` | 0 |
+| Verfügbarkeit einer belastbaren Reha-Inaktivitätskennzahl prüfen | `myyolo report reha-inactivity` | 0 |
+| Verordnungszeilen oder Verordnungsübersicht aggregieren | `myyolo report prescription-metric` | 0 |
 
 Personenbezogene, gesundheitliche und finanzielle Abfragen sind durch getrennte
 Freigabeschalter geschützt. Eine vollständige Übersicht steht im
 [Lesekatalog](docs/read-catalog.md), in der
 [Funktionsübersicht](docs/capabilities.md) und im
 [Datenwörterbuch](docs/data-dictionary.md).
+
+### Lokale Verordnungsaggregate
+
+`report prescription-metric --db /PRIVATER/SNAPSHOT.sqlite --capability reha-prescriptions --format json`
+zählt die schema-konformen Verordnungszeilen der gespeicherten Beobachtung.
+`--capability reha-prescription-summary` summiert dagegen die Spalte `Menge`
+und verlangt zusätzlich `--context-file /PRIVATER/KONTEXT.json`.
+Dieser reguläre 0600-Beleg bindet Zeitraum und Beobachtungszeit an den SHA-256
+von genau diesem Snapshot. `context_from`/`context_to` sind extern erfasster
+Abfragekontext, kein unabhängiger Transportnachweis.
+
+Der Report öffnet ausschließlich read-only, migriert nicht und lehnt WAL-
+Sidecars, unbekannte Tabellen sowie nicht vollständig rekonstruierbare
+Fachzeilen ab. Er gibt keine Namen oder Mitgliedsnummern aus.
+`coverage=schema_matched_rows_only` und
+`source_scope_status=external_operator_scope_required` bleiben sichtbar:
+Der Report beweist weder den gesamten Studiobestand noch Neuzugänge,
+Abläufe oder abgeschlossene Abrechnungen.
+
+### Lokaler Reha-Snapshot und Terminreport
+
+Der lokale Reha-Weg verändert die vorhandene Quelle nicht: Zuerst wird eine
+neue, private SQLite-Kopie mit dem Online-Backup-Verfahren erstellt, danach
+wird ausschließlich diese Kopie gelesen. Die Scope-Datei braucht neben der
+genauen Quelle und dem Standort einen externen Prüfbeleg; eine bloße
+Standortbehauptung wird abgewiesen. Die Receipt bindet diesen Beleg an den
+SHA-256-Hash der Snapshot-Datei. Der isolierte Reha-Lesepfad akzeptiert die
+belegten Schemas 5 und 6; er migriert weder die Quelle noch den Snapshot.
+
+```json
+{
+  "version": 1,
+  "source_db": "/ABSOLUTER/PFAD/reha-source.sqlite",
+  "source": "mysign",
+  "location": "EXAKTER_STANDORTSCHLUESSEL",
+  "provenance": "external_verified_scope",
+  "evidence": {
+    "kind": "independent-local-receipt",
+    "reference": "/ABSOLUTER/PFAD/reha-evidence-receipt.json",
+    "sha256": "093d706920ee522f60419e1a7f6761f753151d08461787d9b05fd786c6d1a327",
+    "verified_at": "2026-09-05T00:00:00Z",
+    "source_db": "/ABSOLUTER/PFAD/reha-source.sqlite",
+    "source": "mysign",
+    "location": "EXAKTER_STANDORTSCHLUESSEL"
+  }
+}
+```
+
+Die unter `evidence.reference` angegebene Datei ist ein eigener, vorhandener
+JSON-Prüfbeleg mit exakt diesen Feldern und ohne weitere Felder. Sie muss als
+reguläre, nicht verlinkte Datei mit Modus `0600` vorliegen; `evidence.sha256`
+ist der SHA-256-Hash ihrer tatsächlichen Bytes (inklusive Zeilenumbruch, falls
+vorhanden):
+
+```json
+{
+  "version": 1,
+  "source_db": "/ABSOLUTER/PFAD/reha-source.sqlite",
+  "source": "mysign",
+  "location": "EXAKTER_STANDORTSCHLUESSEL",
+  "verified_at": "2026-09-05T00:00:00Z",
+  "kind": "independent-local-receipt"
+}
+```
+
+`external_verified_scope` trägt nur die vorab gelieferte Evidence weiter; die
+CLI beweist damit nicht selbst den realen Standort. Die neue Receipt und die
+Snapshot-Datei erhalten `0600`.
+
+`report reha-sessions` gibt Vertrag v3 aus. Pro Termin bleiben die Rohzählungen
+`attendance_rows`, `attended_flag_true`, `signed_flag_true` und
+`cancelled_flag_true` erhalten. Zusätzlich liefert der Report nur sichere
+Schnittmengen: `attended_not_cancelled`,
+`signed_attended_not_cancelled` und `missing_signature_candidate`. Ein
+Signaturkandidat bedeutet ausschließlich `Teilgenommen=true`,
+`HatUnterschrift=false`, `Storniert=false`. Er belegt weder einen physischen
+Check-in noch Abrechnung oder Zahlung. `non_attended_not_cancelled_candidate`
+ist ohne bestätigte Zeitlogik kein No-show. Der v3-Report gibt deshalb keine
+`no_shows`- oder `pending`-Zähler aus.
+
+`participant_count_current_observation` benennt den aktuell importierten
+`TeilnehmerAnzahl`-Wert. Er ist weder Kapazität noch historischer Planstand.
+`prescription_linked_rows` belegt nur, dass an einer Teilnahmezeile eine
+technische Verordnungsreferenz vorhanden ist; Gültigkeit, Aktivstatus und
+Abrechenbarkeit bleiben offen. Der Report verlangt einen frischen einzelnen,
+vollständig validierten mySIGN-Import. Eine über mehrere Imports angewachsene
+Arbeitsdatenbank wird für diesen Pfad abgewiesen.
+
+`report reha-inactivity` verwendet denselben gebundenen, nur lesbaren
+Snapshot-Pfad. Solange weder eine vollständige Anwesenheitshistorie noch der
+aktuelle personenbezogene Verordnungs- und Mitgliedsstatus belegt sind, gibt
+der Report für die Grenzen „mehr als 28 Kalendertage“ und „mehr als drei
+Kalendermonate“ ausschließlich `status=unavailable` ohne Zähler aus. Die
+Grenzen werden in `Europe/Berlin` kalenderbasiert berechnet. Dadurch wird aus
+einem einzelnen rollierenden Snapshot weder eine Null noch eine vermeintliche
+Kandidatenliste abgeleitet.
 
 ## Sicherheitsmodell
 
@@ -590,10 +690,14 @@ myyolo discover admin [--profile NAME] [--db PATH] [--delay DURATION] [--request
 myyolo catalog [--group GROUP] [--format table|json|csv]
 myyolo collect CAPABILITY [typed filters] [--profile NAME] [--db PATH] [--delay DURATION] [--request-budget 1..5] [--dry-run] [data-scope flags]
 myyolo db init [--db PATH]
+myyolo db snapshot --source-db PATH --output-db PATH --scope-input PATH --receipt PATH
 myyolo db status [--format table|json|csv] [--db PATH]
 myyolo doctor [--profile NAME] [--db PATH]
 myyolo import mysign --file PATH [--db PATH]
 myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
+myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--format table|json|csv]
+myyolo report reha-inactivity --db PATH --scope-file PATH --as-of RFC3339 --location KEY
+myyolo report prescription-metric --db PATH --capability reha-prescriptions|reha-prescription-summary [--context-file PATH] [--format table|json|csv]
 myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
 myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
 myyolo report capability CAPABILITY [data-scope flags] [--format table|json|csv] [--db PATH]

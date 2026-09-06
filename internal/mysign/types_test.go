@@ -39,7 +39,7 @@ func TestParseRejectsUnknownPayload(t *testing.T) {
 
 func TestParseRejectsMissingAttendanceMetric(t *testing.T) {
 	payload := `{
-		"KursBuchungen":[{"Id":1}],
+		"KursBuchungen":[{"Id":1,"TeilnehmerAnzahl":0}],
 		"Mitglieder":[{"Id":2}],
 		"Verordnungen":[],
 		"KursTeilnehmer":[{
@@ -76,7 +76,7 @@ func TestParseRejectsUnknownAttendanceReference(t *testing.T) {
 
 func TestParseAcceptsNullOptionalCollection(t *testing.T) {
 	payload := `{
-		"KursBuchungen":[{"Id":1}],
+		"KursBuchungen":[{"Id":1,"TeilnehmerAnzahl":0}],
 		"Mitglieder":[],
 		"Verordnungen":null,
 		"KursTeilnehmer":[]

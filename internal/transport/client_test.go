@@ -188,7 +188,7 @@ func testClient(t *testing.T, responder func(*http.Request) string) *Client {
 func syntheticSnapshot(token string) string {
 	return `{
 		"nextRequestToken":"` + token + `",
-		"KursBuchungen":[{"Id":1}],
+		"KursBuchungen":[{"Id":1,"TeilnehmerAnzahl":1}],
 		"Mitglieder":[{"Id":2}],
 		"Verordnungen":[],
 		"KursTeilnehmer":[{

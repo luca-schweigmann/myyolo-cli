@@ -24,10 +24,14 @@ Verwendung:
   myyolo catalog [--group analytics|courses|members|prescriptions|compliance|financial] [--format table|json|csv]
   myyolo collect CAPABILITY [Filter] [--profile NAME] [--db PATH] [--delay 2s] [--request-budget 1..5]
   myyolo db init [--db PATH]
+  myyolo db snapshot --source-db PATH --output-db PATH --scope-input PATH --receipt PATH
   myyolo db status [--format table|json|csv] [--db PATH]
   myyolo doctor [--profile NAME] [--db PATH]
   myyolo import mysign --file PATH [--db PATH]
   myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
+  myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--format table|json|csv]
+  myyolo report reha-inactivity --db PATH --scope-file PATH --as-of RFC3339 --location KEY
+  myyolo report prescription-metric --db PATH --capability reha-prescriptions|reha-prescription-summary [--context-file PATH] [--format table|json|csv]
   myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
   myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
   myyolo report capability CAPABILITY [Datenfreigaben] [--format table|json|csv] [--db PATH]
@@ -88,6 +92,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 		if len(args) >= 2 && args[1] == "init" {
 			return initDB(ctx, args[2:], stdout)
 		}
+		if len(args) >= 2 && args[1] == "snapshot" {
+			return snapshotDB(ctx, args[2:], stdout)
+		}
 		if len(args) >= 2 && args[1] == "status" {
 			return dbStatus(ctx, args[2:], stdout)
 		}
@@ -98,6 +105,15 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 			return importMySign(ctx, args[2:], stdout)
 		}
 	case "report":
+		if len(args) >= 2 && args[1] == "reha-sessions" {
+			return printRehaSessions(ctx, args[2:], stdout)
+		}
+		if len(args) >= 2 && args[1] == "reha-inactivity" {
+			return printRehaInactivity(ctx, args[2:], stdout)
+		}
+		if len(args) >= 2 && args[1] == "prescription-metric" {
+			return printPrescriptionMetric(ctx, args[2:], stdout)
+		}
 		if len(args) >= 3 && args[1] == "capability" {
 			return printCapabilityReport(ctx, args[2], args[3:], stdout)
 		}

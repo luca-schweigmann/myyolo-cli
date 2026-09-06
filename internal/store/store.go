@@ -494,6 +494,9 @@ func (store *Store) ImportMySign(
 	snapshot mysign.Snapshot,
 	payloadSHA256 string,
 ) (result ImportResult, returnErr error) {
+	if err := snapshot.Validate(); err != nil {
+		return ImportResult{}, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result = ImportResult{
 		Members:       len(snapshot.Members),
@@ -531,6 +534,26 @@ func (store *Store) ImportMySign(
 			store.markSyncFailed(ctx, runID, returnErr)
 		}
 	}()
+
+	// Only a fresh database and validated wire counts prove one observation.
+	var priorRows int
+	if err := tx.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM course_sessions) + (SELECT COUNT(*) FROM attendance) + (SELECT COUNT(*) FROM sync_runs WHERE id <> ?)`, runID).Scan(&priorRows); err != nil {
+		return ImportResult{}, err
+	}
+	validObservation := priorRows == 0 && snapshot.RequiredCollectionsValidated()
+	for _, session := range snapshot.CourseSessions {
+		validObservation = validObservation && session.ParticipantCountValidated()
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS reha_import_observation (singleton INTEGER PRIMARY KEY CHECK(singleton=1), observed_at TEXT NOT NULL, validation TEXT NOT NULL)`); err != nil {
+		return ImportResult{}, err
+	}
+	validation := "invalid"
+	if validObservation {
+		validation = "required_nonnegative_integer_and_collections_v1"
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO reha_import_observation VALUES(1, ?, ?) ON CONFLICT(singleton) DO UPDATE SET observed_at=excluded.observed_at, validation=excluded.validation`, now, validation); err != nil {
+		return ImportResult{}, err
+	}
 
 	// Clear incoming member numbers before assigning the new snapshot values.
 	// This makes number swaps deterministic while the unique index remains
@@ -1046,24 +1069,41 @@ func sessionEndUTC(session mysign.CourseSession) string {
 	if len(match) != 5 {
 		return ""
 	}
-	_, offsetSeconds := start.Zone()
-	sourceOffset := time.FixedZone("source", offsetSeconds)
-	endClock, err := time.ParseInLocation("15:04", match[3]+":"+match[4], sourceOffset)
+	location, err := time.LoadLocation("Europe/Berlin")
 	if err != nil {
 		return ""
 	}
+	start = start.In(location)
+	endClock, err := time.Parse("15:04", match[3]+":"+match[4])
+	if err != nil {
+		return ""
+	}
+	startClock, err := time.Parse("15:04", match[1]+":"+match[2])
+	if err != nil {
+		return ""
+	}
+	day := time.Date(start.Year(), start.Month(), start.Day(), 12, 0, 0, 0, location)
+	if endClock.Before(startClock) {
+		day = day.AddDate(0, 0, 1)
+	}
 	end := time.Date(
-		start.Year(),
-		start.Month(),
-		start.Day(),
+		day.Year(),
+		day.Month(),
+		day.Day(),
 		endClock.Hour(),
 		endClock.Minute(),
 		0,
 		0,
-		sourceOffset,
+		location,
 	)
-	if end.Before(start) {
-		end = end.Add(24 * time.Hour)
+	if end.Hour() != endClock.Hour() || end.Minute() != endClock.Minute() {
+		return ""
+	}
+	for _, delta := range []time.Duration{-time.Hour, time.Hour} {
+		other := end.Add(delta).In(location)
+		if other.Year() == end.Year() && other.YearDay() == end.YearDay() && other.Hour() == end.Hour() && other.Minute() == end.Minute() {
+			return ""
+		}
 	}
 	return end.UTC().Format(time.RFC3339)
 }

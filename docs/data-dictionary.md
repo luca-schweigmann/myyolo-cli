@@ -26,6 +26,30 @@ Der Schalter `--as-of` akzeptiert RFC3339 und macht zeitgebundene Reports
 reproduzierbar. Zum exakten End-Zeitstempel bleibt eine Zeile ausstehend
 (`pending`); sie wird erst danach zum No-Show (`no_shows`).
 
+### Reha-Terminreport v3
+
+Der fail-closed Befehl `report reha-sessions` verwendet bewusst einen engeren
+Vertrag als die älteren allgemeinen mySIGN-Reports:
+
+| Feld | Definition |
+|---|---|
+| `participant_count_current_observation` | Aktuell importierter `TeilnehmerAnzahl`-Wert; keine Kapazität und kein historischer Plan |
+| `attendance_rows` | Gespeicherte Teilnahmezeilen des Termins |
+| `attended_flag_true` | Zeilen mit Quell-Flag `Teilgenommen=true`, unabhängig von anderen Flags |
+| `signed_flag_true` | Zeilen mit Quell-Flag `HatUnterschrift=true`, unabhängig von anderen Flags |
+| `cancelled_flag_true` | Zeilen mit Quell-Flag `Storniert=true`, unabhängig von anderen Flags |
+| `attended_not_cancelled` | `Teilgenommen=true && Storniert=false` |
+| `signed_attended_not_cancelled` | `Teilgenommen=true && HatUnterschrift=true && Storniert=false` |
+| `missing_signature_candidate` | `Teilgenommen=true && HatUnterschrift=false && Storniert=false`; nur Signaturkandidat |
+| `non_attended_not_cancelled_candidate` | `Teilgenommen=false && Storniert=false`; ohne bestätigte Zeitlogik kein No-show |
+| `prescription_linked_rows` | Teilnahmezeilen mit technischer Verordnungsreferenz; keine Aussage zu Gültigkeit, Aktivstatus oder Abrechnung |
+| `prescription_unlinked_rows` | Teilnahmezeilen ohne technische Verordnungsreferenz; keine Aussage zu Fitness-/Premium-Mitgliedschaft |
+| `contradictory_flags` | Flag-Kombinationen, die separat fachlich geprüft werden müssen |
+
+Rohzählungen können sich überschneiden. Der Report bildet deshalb keine
+scheinbar disjunkte Statusverteilung und unterdrückt `no_shows`/`pending`. Er
+belegt weder physischen Check-in noch Abrechnung oder Zahlung.
+
 ## Admin-Metriken
 
 | Report-Befehl | Definition |

@@ -41,6 +41,12 @@ mySIGN liefert einen rollierenden Snapshot. Die CLI baut aus wiederholten
 Erfassungen lokale Historie auf, kann aber Zeiträume, die nie erfasst wurden,
 nicht rekonstruieren.
 
+Der engere `report reha-sessions`-Vertrag v3 verlangt einen frischen einzelnen
+validierten Import. Er gibt Rohflags und sichere Schnittmengen aus, unterdrückt
+aber No-show-/Pending-Klassifikationen. `Teilgenommen=true` ist dort ein
+Quellflag und kein physischer Studio-Check-in. Ein vorhandener
+Verordnungslink belegt weder eine aktive Verordnung noch Abrechenbarkeit.
+
 ## Klassische myYOLO-Administration
 
 Der ursprüngliche Sechs-Seiten-Befehl `discover admin` bleibt ein begrenzter

@@ -96,12 +96,16 @@ func (value *Text) UnmarshalJSON(data []byte) error {
 }
 
 type Snapshot struct {
-	NextRequestToken string `json:"nextRequestToken"`
-	CourseSessions   []CourseSession
-	Attendance       []Attendance
-	Members          []Member
-	Prescriptions    []Prescription
+	NextRequestToken             string `json:"nextRequestToken"`
+	CourseSessions               []CourseSession
+	Attendance                   []Attendance
+	Members                      []Member
+	Prescriptions                []Prescription
+	requiredCollectionsValidated bool
 }
+
+// RequiredCollectionsValidated proves presence and shape at the source boundary.
+func (s Snapshot) RequiredCollectionsValidated() bool { return s.requiredCollectionsValidated }
 
 type wireSnapshot struct {
 	NextRequestToken string                    `json:"nextRequestToken"`
@@ -187,17 +191,28 @@ func setItemID[T any](item *T, id ID) {
 }
 
 func Parse(data []byte) (Snapshot, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return Snapshot{}, fmt.Errorf("decode mySIGN snapshot: %w", err)
+	}
+	for _, name := range []string{"KursBuchungen", "KursTeilnehmer"} {
+		value := bytes.TrimSpace(fields[name])
+		if len(value) == 0 || (value[0] != '[' && value[0] != '{') {
+			return Snapshot{}, fmt.Errorf("required mySIGN collection %s must be a nonnull array or object map", name)
+		}
+	}
 	var wire wireSnapshot
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return Snapshot{}, fmt.Errorf("decode mySIGN snapshot: %w", err)
 	}
 
 	snapshot := Snapshot{
-		NextRequestToken: wire.NextRequestToken,
-		CourseSessions:   []CourseSession(wire.CourseSessions),
-		Attendance:       []Attendance(wire.Attendance),
-		Members:          []Member(wire.Members),
-		Prescriptions:    []Prescription(wire.Prescriptions),
+		NextRequestToken:             wire.NextRequestToken,
+		CourseSessions:               []CourseSession(wire.CourseSessions),
+		Attendance:                   []Attendance(wire.Attendance),
+		Members:                      []Member(wire.Members),
+		Prescriptions:                []Prescription(wire.Prescriptions),
+		requiredCollectionsValidated: true,
 	}
 	if err := snapshot.Validate(); err != nil {
 		return Snapshot{}, err
@@ -206,7 +221,7 @@ func Parse(data []byte) (Snapshot, error) {
 }
 
 func (snapshot Snapshot) Validate() error {
-	if len(snapshot.CourseSessions) == 0 &&
+	if !snapshot.requiredCollectionsValidated && len(snapshot.CourseSessions) == 0 &&
 		len(snapshot.Attendance) == 0 &&
 		len(snapshot.Members) == 0 &&
 		len(snapshot.Prescriptions) == 0 {
@@ -258,6 +273,7 @@ func (snapshot Snapshot) Validate() error {
 	}
 
 	attendanceIDs := make(map[ID]struct{}, len(snapshot.Attendance))
+	attendancePairs := make(map[[2]ID]bool)
 	for _, attendance := range snapshot.Attendance {
 		if attendance.ID == "" {
 			return fmt.Errorf("attendance row without Id")
@@ -269,6 +285,11 @@ func (snapshot Snapshot) Validate() error {
 			return fmt.Errorf("duplicate attendance Id %s", attendance.ID)
 		}
 		attendanceIDs[attendance.ID] = struct{}{}
+		pair := [2]ID{attendance.MemberID, attendance.CourseSessionID}
+		if attendancePairs[pair] {
+			return fmt.Errorf("duplicate attendance member-session pair")
+		}
+		attendancePairs[pair] = true
 		if _, exists := memberIDs[attendance.MemberID]; !exists {
 			return fmt.Errorf("attendance %s references unknown member %s", attendance.ID, attendance.MemberID)
 		}
@@ -293,15 +314,38 @@ func (snapshot Snapshot) Validate() error {
 }
 
 type CourseSession struct {
-	ID                    ID     `json:"Id"`
-	DateISO               string `json:"DatumISO8601"`
-	DateFormatted         string `json:"DatumFormatted"`
-	Description           string `json:"Beschreibung"`
-	RoomName              string `json:"RaumName"`
-	TimeFormatted         string `json:"VonBisFormatted"`
-	ParticipantCount      int    `json:"TeilnehmerAnzahl"`
-	CurrentWeek           Bool   `json:"IstInAktuellerWoche"`
-	SignatureAvailableISO string `json:"DatumUnterschriftAbISO8601"`
+	ID                        ID     `json:"Id"`
+	DateISO                   string `json:"DatumISO8601"`
+	DateFormatted             string `json:"DatumFormatted"`
+	Description               string `json:"Beschreibung"`
+	RoomName                  string `json:"RaumName"`
+	TimeFormatted             string `json:"VonBisFormatted"`
+	ParticipantCount          int    `json:"TeilnehmerAnzahl"`
+	participantCountValidated bool
+	CurrentWeek               Bool   `json:"IstInAktuellerWoche"`
+	SignatureAvailableISO     string `json:"DatumUnterschriftAbISO8601"`
+}
+
+// ParticipantCountValidated records required-field decoding, not a default zero.
+func (s CourseSession) ParticipantCountValidated() bool { return s.participantCountValidated }
+
+func (s *CourseSession) UnmarshalJSON(data []byte) error {
+	type alias CourseSession
+	var decoded CourseSession
+	wire := struct {
+		*alias
+		Count *int `json:"TeilnehmerAnzahl"`
+	}{alias: (*alias)(&decoded)}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if wire.Count == nil || *wire.Count < 0 {
+		return fmt.Errorf("TeilnehmerAnzahl must be a required nonnegative integer")
+	}
+	decoded.ParticipantCount = *wire.Count
+	decoded.participantCountValidated = true
+	*s = decoded
+	return nil
 }
 
 type Attendance struct {
