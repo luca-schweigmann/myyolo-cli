@@ -59,3 +59,11 @@ exportiert mit:
 ```bash
 myyolo catalog --format json
 ```
+
+## Lokale Management-Historie
+
+`report reha-history --schema-version v2` erweitert den lokalen, hashgebundenen
+Report um Kurslabel, belegte Eintragungen und signierte Teilnahmen. Der
+vollständige Null-/Beleg-/Versionsvertrag steht in `docs/reha-history.md`.
+Die mySIGN-Spec dokumentiert dafür `CourseSession` und `Attendance`; sie behauptet
+keine separate Kursserien-ID, historische Abdeckung oder Kapazität in mySIGN.

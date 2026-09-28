@@ -87,3 +87,25 @@ types:
         type: object
       - name: Verordnungen
         type: object
+  CourseSession:
+    fields:
+      - name: Id
+        type: string
+      - name: Beschreibung
+        type: string
+      - name: DatumISO8601
+        type: string
+      - name: VonBisFormatted
+        type: string
+      - name: TeilnehmerAnzahl
+        type: integer
+  Attendance:
+    fields:
+      - name: KursBuchungId
+        type: string
+      - name: HatUnterschrift
+        type: boolean
+      - name: Teilgenommen
+        type: boolean
+      - name: Storniert
+        type: boolean

@@ -49,7 +49,8 @@ Personenbezogene, gesundheitliche und finanzielle Abfragen sind durch getrennte
 Freigabeschalter geschützt. Eine vollständige Übersicht steht im
 [Lesekatalog](docs/read-catalog.md), in der
 [Funktionsübersicht](docs/capabilities.md) und im
-[Datenwörterbuch](docs/data-dictionary.md).
+[Datenwörterbuch](docs/data-dictionary.md). Der Vertrag für `report reha-history` steht in der
+[Reha-Historie](docs/reha-history.md).
 
 ### Lokale Verordnungsaggregate
 
@@ -696,6 +697,7 @@ myyolo doctor [--profile NAME] [--db PATH]
 myyolo import mysign --file PATH [--db PATH]
 myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
 myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--format table|json|csv]
+myyolo report reha-history --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--schema-version v1|v2]
 myyolo report reha-inactivity --db PATH --scope-file PATH --as-of RFC3339 --location KEY
 myyolo report prescription-metric --db PATH --capability reha-prescriptions|reha-prescription-summary [--context-file PATH] [--format table|json|csv]
 myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]

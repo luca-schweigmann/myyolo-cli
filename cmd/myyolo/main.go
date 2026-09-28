@@ -30,6 +30,7 @@ Verwendung:
   myyolo import mysign --file PATH [--db PATH]
   myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
   myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--format table|json|csv]
+  myyolo report reha-history --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--schema-version v1|v2]
   myyolo report reha-inactivity --db PATH --scope-file PATH --as-of RFC3339 --location KEY
   myyolo report prescription-metric --db PATH --capability reha-prescriptions|reha-prescription-summary [--context-file PATH] [--format table|json|csv]
   myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
@@ -107,6 +108,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 	case "report":
 		if len(args) >= 2 && args[1] == "reha-sessions" {
 			return printRehaSessions(ctx, args[2:], stdout)
+		}
+		if len(args) >= 2 && args[1] == "reha-history" {
+			return printRehaHistory(ctx, args[2:], stdout)
 		}
 		if len(args) >= 2 && args[1] == "reha-inactivity" {
 			return printRehaInactivity(ctx, args[2:], stdout)
