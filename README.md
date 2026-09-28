@@ -38,6 +38,8 @@ Berechtigung und im Rahmen der Vereinbarung, die für deinen Zugang gilt.
 | Einzelne Kurstermine auswerten | `myyolo report sessions` | 0 |
 | Teilnahme pro Mitglied auswerten | `myyolo report members` | 0 |
 | Gesammelte Admin-Routen und Schemas prüfen | `myyolo report admin-capabilities` | 0 |
+| Historische Reha-Diagrammdaten inkl. Quellbelegen | `myyolo report admin-reha-ranges --db PATH --from YYYY-MM-DD --to YYYY-MM-DD` | 0 |
+| Native Reha-Kursdetails als sichere Aggregate | `myyolo report admin-reha-sessions --db PATH --from YYYY-MM-DD --to YYYY-MM-DD` | 0 |
 | Reha-Zeitfenster und Dauer auswerten | `myyolo report admin-reha-hours` | 0 |
 | Monatliche Kursteilnahme auswerten | `myyolo report admin-course-months` | 0 |
 | Fehlende Reha-Unterschriften zählen | `myyolo report admin-missing-signatures` | 0 |
@@ -49,7 +51,9 @@ Personenbezogene, gesundheitliche und finanzielle Abfragen sind durch getrennte
 Freigabeschalter geschützt. Eine vollständige Übersicht steht im
 [Lesekatalog](docs/read-catalog.md), in der
 [Funktionsübersicht](docs/capabilities.md) und im
-[Datenwörterbuch](docs/data-dictionary.md).
+[Datenwörterbuch](docs/data-dictionary.md). Die Verträge für `report reha-history`,
+`admin-reha-sessions` und `admin-reha-ranges` stehen in der
+[Reha-Historie](docs/reha-history.md).
 
 ### Lokale Verordnungsaggregate
 
@@ -696,9 +700,11 @@ myyolo doctor [--profile NAME] [--db PATH]
 myyolo import mysign --file PATH [--db PATH]
 myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
 myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--format table|json|csv]
+myyolo report reha-history --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--schema-version v1|v2]
 myyolo report reha-inactivity --db PATH --scope-file PATH --as-of RFC3339 --location KEY
 myyolo report prescription-metric --db PATH --capability reha-prescriptions|reha-prescription-summary [--context-file PATH] [--format table|json|csv]
 myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
+myyolo report admin-reha-ranges|admin-reha-sessions --db PATH --from YYYY-MM-DD --to YYYY-MM-DD [--as-of RFC3339]
 myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
 myyolo report capability CAPABILITY [data-scope flags] [--format table|json|csv] [--db PATH]
 myyolo report admin-reha-attendance|admin-missing-signature-members|admin-records --include-personal-data [data-scope flags] [--route EXACT_PATH] [--format table|json|csv] [--db PATH]

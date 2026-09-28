@@ -85,6 +85,17 @@ resources:
   courses:
     description: Repräsentative Kurscontrolling-Lesezugriffe.
     endpoints:
+      planner_week:
+        method: GET
+        path: "/Kursplaner_WEB/Wochenplaner_Tabelle_liste.asp?Raum="
+        description: Source-advertised Datum navigation; empty Raum means all rooms. Runtime validates seven-day inventory.
+        query:
+          - name: Datum
+            flag_name: date
+            type: string
+            required: false
+        response:
+          type: string
       definitions:
         method: GET
         path: "/Kursplaner/Kurse_Liste.asp"
@@ -98,6 +109,93 @@ resources:
             flag_name: course-id
             type: string
             required: true
+        response:
+          type: string
+
+      attended_range:
+        method: POST
+        path: "/Kursplaner_Auswertungen/Kurs_Teilnehmer_anwesend.asp"
+        description: Datumsbegrenzte Anwesenheitsliste; Personen- und Gesundheitsfreigabe erforderlich.
+        body:
+          - name: von
+            flag_name: from
+            type: string
+            required: true
+          - name: bis
+            flag_name: to
+            type: string
+            required: true
+        response:
+          type: string
+      not_attended_range:
+        method: POST
+        path: "/Kursplaner_Auswertungen/Kurs_Teilnehmer_nicht_anwesend.asp"
+        description: Datumsbegrenzte Nicht-Anwesenheitsliste; Personen- und Gesundheitsfreigabe erforderlich.
+        body:
+          - name: von
+            flag_name: from
+            type: string
+            required: true
+          - name: bis
+            flag_name: to
+            type: string
+            required: true
+        response:
+          type: string
+      cancelled_range:
+        method: POST
+        path: "/Kursplaner_Auswertungen/Kurs_Teilnehmer_storniert.asp"
+        description: Datumsbegrenzte Stornierungsliste; Personen- und Gesundheitsfreigabe erforderlich.
+        body:
+          - name: von
+            flag_name: from
+            type: string
+            required: true
+          - name: bis
+            flag_name: to
+            type: string
+            required: true
+        response:
+          type: string
+      planner_day:
+        method: GET
+        path: "/Kursplaner_WEB/Tagesplaner_Tabelle_liste.asp"
+        description: Aktueller Tagesplaner; kein beliebiger Datumsparameter belegt. Personenfreigabe erforderlich.
+        response:
+          type: string
+      day_list:
+        method: POST
+        path: "/Kursplaner/Listen/Kursplaner_Liste_Tag_anzeigen.asp"
+        description: Druckliste fuer einen expliziten Tag; Personenfreigabe erforderlich.
+        body:
+          - name: von
+            flag_name: date
+            type: string
+            required: true
+        response:
+          type: string
+      session:
+        method: GET
+        path: "/Kursplaner_WEB/Kursplaner_Teilnehmer_eingabe.asp"
+        description: |
+          Nur exakt aus dem Planer referenzierte Sitzung lesen; Personen- und
+          Gesundheitsfreigabe erforderlich. Der Runtime-Parser validiert die
+          Teilnehmer-Tabelle und AW=anwesend_haken.png sowie die separate
+          Unterschrift=unterschrift_gruen.png in derselben Zeile. Andere
+          Farbmarker sind keine Anwesenheit. Siehe docs/reha-history.md.
+        query:
+          - name: Kurs
+            flag_name: course-id
+            type: string
+            required: true
+          - name: Datum
+            flag_name: date
+            type: string
+            required: true
+          - name: defaultMode
+            flag_name: planner
+            type: string
+            required: false
         response:
           type: string
 

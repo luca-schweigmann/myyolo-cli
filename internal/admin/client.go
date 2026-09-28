@@ -405,7 +405,7 @@ func (client *Client) readCapabilityPage(
 		body = strings.NewReader(request.Body)
 		contentType = "application/x-www-form-urlencoded"
 	}
-	return client.readClassifiedPage(
+	page, err := client.readClassifiedPage(
 		ctx,
 		request.Capability.Method,
 		request.Path,
@@ -414,6 +414,11 @@ func (client *Client) readCapabilityPage(
 		readcatalog.RouteKey(request.Capability.Name),
 		budget,
 	)
+	if err == nil {
+		page.RequestPath = request.Path
+		page.RequestBody = request.Body
+	}
+	return page, err
 }
 
 func (client *Client) readClassifiedPage(

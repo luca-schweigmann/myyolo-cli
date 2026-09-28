@@ -349,6 +349,17 @@ func (store *Store) migrate(ctx context.Context) error {
 			signature_available_iso TEXT,
 			updated_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS reha_session_observations (
+			source TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			observed_at TEXT NOT NULL,
+			participant_count INTEGER,
+			validation TEXT NOT NULL,
+			attendance_rows INTEGER,
+			participated INTEGER,
+			attendance_validation TEXT NOT NULL DEFAULT 'unknown',
+			PRIMARY KEY(source, session_id)
+		)`,
 		`CREATE TABLE IF NOT EXISTS prescriptions (
 			source TEXT NOT NULL DEFAULT 'mysign',
 			myyolo_id TEXT PRIMARY KEY,
@@ -423,6 +434,15 @@ func (store *Store) migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS admin_records_route_idx
 		 ON admin_records(route, table_index)`,
+		`CREATE TABLE IF NOT EXISTS admin_observations (
+			run_id INTEGER PRIMARY KEY REFERENCES sync_runs(id),
+			route TEXT NOT NULL,
+			request_path TEXT NOT NULL,
+			request_body TEXT NOT NULL,
+			observed_at TEXT NOT NULL,
+			schema_fingerprint TEXT NOT NULL,
+			page_json TEXT NOT NULL
+		)`,
 	}
 
 	tx, err := store.db.BeginTx(ctx, nil)
@@ -445,6 +465,9 @@ func (store *Store) migrate(ctx context.Context) error {
 		{"prescriptions", "source", `TEXT NOT NULL DEFAULT 'mysign'`},
 		{"attendance", "source", `TEXT NOT NULL DEFAULT 'mysign'`},
 		{"sync_runs", "record_count", `INTEGER NOT NULL DEFAULT 0`},
+		{"reha_session_observations", "attendance_rows", `INTEGER`},
+		{"reha_session_observations", "participated", `INTEGER`},
+		{"reha_session_observations", "attendance_validation", `TEXT NOT NULL DEFAULT 'unknown'`},
 	} {
 		if err := ensureColumn(
 			ctx,
@@ -643,6 +666,41 @@ func (store *Store) ImportMySign(
 		}
 	}
 
+	// Keep row-level proof with the value it validates. Migration never blesses
+	// legacy default zeros; only this validated wire observation can do so.
+	attendanceCounts := make(map[mysign.ID][2]int)
+	for _, row := range snapshot.Attendance {
+		counts := attendanceCounts[row.CourseSessionID]
+		counts[0]++
+		if bool(row.Signed) && bool(row.Attended) && !bool(row.Cancelled) {
+			counts[1]++
+		}
+		attendanceCounts[row.CourseSessionID] = counts
+	}
+	for _, session := range snapshot.CourseSessions {
+		var count, attendanceRows, participated any
+		attendanceValidation := "unknown"
+		if snapshot.RequiredCollectionsValidated() {
+			counts := attendanceCounts[session.ID]
+			attendanceRows, participated = counts[0], counts[1]
+			attendanceValidation = "complete_for_observed_snapshot"
+		}
+		validation := "unknown"
+		if snapshot.RequiredCollectionsValidated() && session.ParticipantCountValidated() {
+			count = session.ParticipantCount
+			validation = "required_nonnegative_integer_and_collections_v1"
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO reha_session_observations
+			(source, session_id, observed_at, participant_count, validation, attendance_rows, participated, attendance_validation)
+			VALUES('mysign', ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(source, session_id) DO UPDATE SET
+			observed_at=excluded.observed_at, participant_count=excluded.participant_count,
+			validation=excluded.validation, attendance_rows=excluded.attendance_rows,
+			participated=excluded.participated, attendance_validation=excluded.attendance_validation`, string(session.ID), now, count, validation, attendanceRows, participated, attendanceValidation); err != nil {
+			return ImportResult{}, fmt.Errorf("record Reha session observation: %w", err)
+		}
+	}
+
 	for _, attendance := range snapshot.Attendance {
 		var prescriptionID any
 		if attendance.PrescriptionID != "" {
@@ -797,6 +855,19 @@ func (store *Store) ImportAdminPageAt(
 			store.markSyncFailed(ctx, runID, returnErr)
 		}
 	}()
+
+	// Preserve every completed observation, including duplicate rows and A-B-A
+	// changes. The legacy latest-row index remains for existing reports.
+	pageJSON, err := json.Marshal(page)
+	if err != nil {
+		return AdminImportResult{}, fmt.Errorf("encode admin observation")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO admin_observations
+		(run_id, route, request_path, request_body, observed_at, schema_fingerprint, page_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, runID, page.Metadata.Route,
+		page.RequestPath, page.RequestBody, now, page.Metadata.Fingerprint, string(pageJSON)); err != nil {
+		return AdminImportResult{}, fmt.Errorf("preserve admin observation")
+	}
 
 	headingsJSON, err := json.Marshal(page.Metadata.Headings)
 	if err != nil {

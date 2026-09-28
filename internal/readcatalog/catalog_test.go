@@ -94,6 +94,37 @@ func TestBuildNormalizesDatesAndRejectsUnrelatedParameters(t *testing.T) {
 	}
 }
 
+func TestRehaAttendanceMonthlySupportsOptionalYear(t *testing.T) {
+	withoutYear, err := Build("reha-attendance-monthly", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withoutYear.Path != "/Kursplaner_Auswertungen/Statistik/Reha_Anwesenheit_Monat_Anzeigen.asp" {
+		t.Fatalf("unexpected default path: %s", withoutYear.Path)
+	}
+	if withoutYear.Body != "" || !ValidateRequest(withoutYear) {
+		t.Fatalf("default request was not preserved: %#v", withoutYear)
+	}
+
+	withYear, err := Build("reha-attendance-monthly", map[string]string{"year": "2025"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withYear.Path != "/Kursplaner_Auswertungen/Statistik/Reha_Anwesenheit_Monat_Anzeigen.asp?Jahr=2025" {
+		t.Fatalf("unexpected year-filtered path: %s", withYear.Path)
+	}
+	if withYear.Body != "" || !ValidateRequest(withYear) {
+		t.Fatalf("year-filtered request was not valid: %#v", withYear)
+	}
+
+	if _, err := Build("reha-attendance-monthly", map[string]string{"year": "1999"}); err == nil || !strings.Contains(err.Error(), "between 2000 and 2100") {
+		t.Fatalf("invalid year error = %v", err)
+	}
+	if _, err := Build("attendance-monthly", map[string]string{"year": "2025"}); err == nil || !strings.Contains(err.Error(), "does not accept --year") {
+		t.Fatalf("unrelated capability accepted --year: %v", err)
+	}
+}
+
 func TestBuildCreatesBoundedDynamicQuery(t *testing.T) {
 	request, err := Build("course-session", map[string]string{
 		"course-id": "41707",
@@ -221,5 +252,31 @@ func TestSensitivityForStoredRouteUsesMostRestrictiveMatchingCapability(t *testi
 	}
 	if _, ok := SensitivityForStoredRoute("/not-classified.asp"); ok {
 		t.Fatal("unknown stored route was classified")
+	}
+}
+
+func TestCourseSessionAllowsExactSourceLinkWithoutPlanner(t *testing.T) {
+	request, err := Build("course-session", map[string]string{"course-id": "321", "date": "2026-09-16"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(request.Path, "defaultMode") {
+		t.Fatalf("invented planner mode: %s", request.Path)
+	}
+	if !ValidateRequest(request) {
+		t.Fatal("exact source request not accepted")
+	}
+}
+
+func TestWeekPlannerObservedDateNavigationAllRooms(t *testing.T) {
+	r, e := Build("course-planner-week", map[string]string{"date": "2026-07-06"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if r.Path != "/Kursplaner_WEB/Wochenplaner_Tabelle_liste.asp?Datum=06.07.2026&Raum=" {
+		t.Fatalf("path=%s", r.Path)
+	}
+	if _, e := Build("course-planner-week", map[string]string{"date": "2026-02-31"}); e == nil {
+		t.Fatal("invalid date accepted")
 	}
 }

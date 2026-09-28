@@ -83,7 +83,7 @@ func form(name, remote string, kind Kind, required bool) Parameter {
 }
 
 func fixedQuery(remote, value string) Parameter {
-	return Parameter{Remote: remote, Location: Query, Fixed: value, Required: true}
+	return Parameter{Remote: remote, Location: Query, Fixed: value, Required: value != ""}
 }
 
 func enumQuery(name, remote string, required bool, allowed ...string) Parameter {
@@ -128,7 +128,8 @@ var capabilities = []Capability{
 		form("from", "von", Date, true), form("to", "bis", Date, true)),
 	cap("attendance-weekly", "analytics", "Historische Studio-Anwesenheit nach Woche", http.MethodGet, "/Statistiken/Auswertungen/auswertung_Anwesenheit_Wochen.asp", Aggregate),
 	cap("attendance-monthly", "analytics", "Historische Anwesenheit aktiver Mitglieder nach Monat", http.MethodGet, "/Kursplaner_Auswertungen/Statistik/Anwesenheit_Monat_Anzeigen.asp", Aggregate),
-	cap("reha-attendance-monthly", "analytics", "Historische Reha-Anwesenheit nach Monat", http.MethodGet, "/Kursplaner_Auswertungen/Statistik/Reha_Anwesenheit_Monat_Anzeigen.asp", Aggregate),
+	cap("reha-attendance-monthly", "analytics", "Historische Reha-Anwesenheit nach Monat", http.MethodGet, "/Kursplaner_Auswertungen/Statistik/Reha_Anwesenheit_Monat_Anzeigen.asp", Aggregate,
+		query("year", "Jahr", Year, false)),
 	cap("prevention-attendance-monthly", "analytics", "Historische Präventions-Anwesenheit nach Monat", http.MethodGet, "/Kursplaner_Auswertungen/Statistik/Praevention_Anwesenheit_Monat_Anzeigen.asp", Aggregate),
 	cap("attendance-week-range", "analytics", "Anwesenheit aktiver Mitglieder für einen begrenzten Wochenbereich", http.MethodPost, "/Kursplaner_Auswertungen/Statistik/Anwesenheit_Wochen_Anzeigen.asp", Aggregate,
 		fixedQuery("Anzeige", "1"), form("year", "Jahr", Year, true), form("week-from", "Wochevon", Week, true), form("week-to", "Wochebis", Week, true)),
@@ -148,13 +149,13 @@ var capabilities = []Capability{
 	cap("course-history", "courses", "Anwesenheitssummen für einen Kurs nach Datum", http.MethodGet, "/Statistiken/Kursplaner/Kurs_Teilnehmer_anwesend_Kurs.asp", Aggregate,
 		query("course-id", "KursID", PositiveID, true)),
 	cap("course-definitions", "courses", "Kursstammdaten, Zeitplan, Raum und Aktivstatus", http.MethodGet, "/Kursplaner/Kurse_Liste.asp", Aggregate),
-	cap("course-planner-week", "courses", "Aktueller wöchentlicher Kursplaner", http.MethodGet, "/Kursplaner_WEB/Wochenplaner_Tabelle_liste.asp", Personal),
+	cap("course-planner-week", "courses", "Wöchentlicher Kursplaner mit expliziter Datumswahl", http.MethodGet, "/Kursplaner_WEB/Wochenplaner_Tabelle_liste.asp", Personal, query("date", "Datum", Date, false), fixedQuery("Raum", "")),
 	cap("course-planner-day", "courses", "Aktueller täglicher Kursplaner", http.MethodGet, "/Kursplaner_WEB/Tagesplaner_Tabelle_liste.asp", Personal),
 	cap("course-day-list", "courses", "Druckbare Kursliste für einen Tag", http.MethodPost, "/Kursplaner/Listen/Kursplaner_Liste_Tag_anzeigen.asp", Personal,
 		form("date", "von", Date, true)),
 	cap("course-session", "courses", "Teilnehmerliste für einen Kurstermin", http.MethodGet, "/Kursplaner_WEB/Kursplaner_Teilnehmer_eingabe.asp", Health,
 		query("course-id", "Kurs", PositiveID, true), query("date", "Datum", Date, true),
-		enumQuery("planner", "defaultMode", true, "A", "B")),
+		enumQuery("planner", "defaultMode", false, "A", "B")),
 	cap("members-with-appointment", "courses", "Aktive Mitglieder mit Termin", http.MethodGet, "/Kursplaner_Auswertungen/Aktive_mit_Termin.asp", Personal),
 	cap("members-with-appointment-7-days", "courses", "Aktive Mitglieder mit Termin in sieben Tagen", http.MethodGet, "/Kursplaner_Auswertungen/Aktive_mit_Termin_7Tage.asp", Personal),
 	cap("members-with-appointment-14-days", "courses", "Aktive Mitglieder mit Termin in vierzehn Tagen", http.MethodGet, "/Kursplaner_Auswertungen/Aktive_mit_Termin_14Tage.asp", Personal),
@@ -304,6 +305,10 @@ func Build(name string, values map[string]string) (Request, error) {
 	formValues := url.Values{}
 	normalizedValues := make(map[string]string)
 	for _, parameter := range capability.Parameters {
+		if parameter.Name == "" && parameter.Location == Query {
+			queryValues.Set(parameter.Remote, parameter.Fixed)
+			continue
+		}
 		value := parameter.Fixed
 		if parameter.Name != "" {
 			value = remaining[parameter.Name]
@@ -512,7 +517,7 @@ func matchesParameters(
 			return false
 		}
 		value := queryValues[0]
-		if parameter.Fixed != "" {
+		if parameter.Name == "" {
 			if value != parameter.Fixed {
 				return false
 			}
