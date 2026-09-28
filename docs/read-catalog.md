@@ -47,7 +47,7 @@ und nicht gespeichert.
 - `prevention-attendance-monthly` - aggregate: Präventions-Anwesenheit nach Monat
 - `prevention-week-range` - aggregate; `--year --week-from --week-to`
 - `reha-attendance` - health: Reha-Anwesenheit und freigegebene Zeitfenster
-- `reha-attendance-monthly` - aggregate: Reha-Anwesenheit nach Monat
+- `reha-attendance-monthly` - aggregate; optional `--year`: Reha-Anwesenheit nach Monat
 - `reha-week-range` - aggregate; `--year --week-from --week-to`
 - `studio-hourly-load` - aggregate; `--from --to`
 
@@ -63,7 +63,7 @@ und nicht gespeichert.
 - `course-not-attended` - health; `--from --to`
 - `course-planner-day` - personal
 - `course-planner-week` - personal
-- `course-session` - health; `--course-id --date --planner`
+- `course-session` - health; `--course-id --date [--planner]`
 - `members-not-attending` - personal
 - `members-with-appointment` - personal
 - `members-with-appointment-7-days` - personal
