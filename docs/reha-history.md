@@ -66,3 +66,116 @@ geplante Termin vorhanden ist. `requested_from`, `requested_to`, `as_of` und
 `timezone` machen den Auswertungsrahmen explizit. V1-Zählfelder bleiben aus
 Kompatibilitätsgründen erhalten; v2-Konsumenten verwenden die nullable
 `registered`-/`participated`-Felder samt ihren jeweiligen Belegen.
+
+## Native Admin-Kursdetails
+
+```sh
+myyolo report admin-reha-sessions --db /private/admin.sqlite \
+  --from 2026-07-01 --to 2026-09-16
+```
+
+Dieser ausschließlich lokale Report (`admin-reha-sessions.v1`) liest typisierte
+Kursdetail-Beobachtungen aus `admin_observations`. Er gibt pseudonyme native
+Kurs-/Termin-Schlüssel, Datum, optionalen originalen Planermodus, Beobachtungszeit,
+`registered`, `attendance_marked`, `signed_attendance` und `participated` aus.
+Die native Terminidentität stammt aus dem versteckten Buchungsschlüssel und
+Datum der Detailseite; die Kursserienidentität aus dem archivierten
+Kurs-ID/Datum/Planermodus-Request. Fehlt der Planermodus im Quelllink, bleibt er fehlen; er wird nie als A/B
+hinzugedichtet. Der Report behauptet keinen Standort, den das Admin-Archiv nicht
+selbst belegt. Die Integration muss den Account-/Standort-Scope separat erhalten.
+
+`registered` zählt die validierten, lückenlos nummerierten Teilnehmerzeilen.
+`attendance_marked` erfordert genau `anwesend_haken.png` in der AW-Spalte.
+`participated` ist für den Management-Vertrag genau AW-Markierung UND
+`unterschrift_gruen.png` in derselben Teilnehmerzeile. Die Quellenlegende benennt
+das grüne Unterschriftensymbol als vorhandene, ansehbare Unterschrift; das rote
+als fehlende Unterschrift. Andere grüne/rote Symbole werden nicht als Anwesenheit
+interpretiert. `signed_attendance` ist derselbe fachliche Wert mit technischem
+Namen. `cancelled` und `capacity` bleiben unbekannt; Stornierungen werden nicht
+geraten oder von der belegten Teilnahme abgezogen.
+
+Unbekannte Statusbilder, Steuerelemente, geänderte Tabellenüberschriften,
+nicht lückenlose Zeilennummern, doppelte Teilnehmerreferenzen und mehrdeutige
+Tabellen werden abgelehnt. Doppelte reine Links zählen nicht doppelt. Leere,
+schematisch vollständige Tabellen sind beobachtete 0; fehlende typisierte
+Altarchive sind ein sichtbarer Fehler. `past_local_day` wird ausschließlich für
+Tage vor dem lokalen As-of-Tag gesetzt; heute und später bleiben `provisional`.
+
+Der Report zählt nur tatsächlich archivierte native Termine und verbindet sie
+nicht über Namen/Uhrzeiten mit mySIGN. Ein erwarteter Gesamtkalender und fehlende
+Terminzahlen bleiben `null`. Die Detailseite kann mehr Daten darstellen als der
+bisherige reine HTML-Textparser: Bildzustände sind jetzt explizit ausgewertet,
+Personen- und Unterschriftsmaterial wird nicht exportiert.
+
+## Historische Admin-Klassifikationen für Diagramme
+
+```sh
+myyolo report admin-reha-ranges --db /private/admin.sqlite \
+  --from 2026-07-01 --to 2026-09-15
+```
+
+Der lokale Vertrag `admin-reha-ranges.v1` kombiniert drei vollständig validierte
+Range-Beobachtungen je identischem Quellzeitraum: `course-attended`,
+`course-not-attended`, `course-cancelled`. Parser prüfen die angezeigten
+Formulardaten `von`/`bis`, exakte Tabellenüberschriften, lückenlose Zeilennummern,
+Datumsgrenzen und native Buchungsreferenzen. Pagination-Hinweise, Drift und
+fehlende Sammlungen werden abgelehnt. Eine ausdrücklich leere vollständige
+Klassifikation ist 0; eine fehlende Sammlung ist kein 0-Wert.
+
+Die Range-Referenz `KursID` bezeichnet **eine Buchung/einen Termin**, keine
+wiederkehrende Kursserie. Der öffentliche Schlüssel ist ein namensraumgetrennter
+Hash dieser nativen ID. Gleichnamige oder zeitgleiche Termine bleiben getrennt.
+Eine Kursdetailseite kann über ihren versteckten nativen `Kurs`-Buchungsschlüssel
+und `Datum` die exakte Beziehung zu ihrer angefragten Kursserien-ID belegen.
+Nur diese ausdrückliche Beziehung erlaubt das optionale `stable_course_id` und
+`signed_participated`; Label oder Uhrzeit erlauben keine solche Zuordnung.
+
+- `registered = attended + not_attended` aus beiden vollständigen Klassifikationen.
+- `participated = attended`, Status `admin_attendance_classification`. Anzeige:
+  **Teilgenommen**, Erklärung: „von myYOLO als anwesend geführt“.
+- `cancelled` bleibt separat und wird nicht auf Eintragungen aufgeschlagen.
+- `signed_participated` bleibt null, bis derselbe native Termin in einer
+  Detailbeobachtung AW plus grüne Unterschrift derselben Zeile belegt.
+- `capacity` bleibt null; es wird keine heutige Kapazität historisch zurückgerechnet.
+- `registered_observed_at` enthält beide Quellzeitpunkte; Anwesenheit, Stornos
+  und Signaturen erhalten eigene Beobachtungszeitpunkte.
+
+Der Report enthält Label, Datum, Start-/Endzeit, alle oben genannten Werte und
+Durchschnitte je beobachtetem abgeschlossenem Termin im gewählten Zeitraum.
+Heutige und künftige lokale Tage bleiben `provisional` und gehen nicht in diese
+Durchschnitte ein. Echte 0-Werte gehen ein; unbekannte Termine werden nicht
+hinzugedichtet. Die Beobachtung ist der heute gelesene Stand historischer
+Termine, keine Rekonstruktion früherer Voranmeldestände.
+
+Alle angefragten Kalendertage müssen durch vollständige Range-Tripel abgedeckt
+sein. Das beweist die Vollständigkeit dieser Quellklassifikationen, aber nicht
+ein autoritatives Kalenderinventar: komplett leere/geplante Termine, die keine
+Route aufführt, bleiben unbekannt. `expected_sessions` und `missing_sessions`
+bleiben deshalb null. `source_windows` weist die konkreten Datenfenster aus.
+Kein Mitgliedsname, keine Mitglieds-/Verordnungs-ID, kein privater Link oder
+roher Buchungsschlüssel gelangt in diesen Chart-Vertrag.
+
+### Vollständiges Wocheninventar und leere Termine
+
+Die source-advertised Kalendernavigation erlaubt GET auf den Wochenplaner mit
+`Datum=TT.MM.JJJJ` und leerem `Raum` (= alle Räume). Der typisierte Parser verlangt
+sieben lückenlose Tagesabschnitte Montag–Sonntag, exakte Header und native
+Kurs-/Datum-/Planer-Referenzen. `Plätze - belegt = frei` wird validiert;
+negative freie Plätze bei Überbelegung bleiben sichtbar und werden nicht gekappt.
+
+Ein explizit mit `belegt=0` geführter Planertermin wird nur dann zusätzlich als
+0/0-Termin ausgegeben, wenn sein exakt verlinkter Kursdetail-Beleg eine leere
+validierte Liste und die native Buchungs-ID liefert. Diese Termine gehen in
+die Durchschnittsdenominatoren ein. Positive Termine stammen weiterhin aus
+beiden vollständigen Range-Klassifikationen; eine dort fehlende exakte
+Buchungs-ID ist **unbekannt/Fehler**, niemals stillschweigend 0.
+
+`expected_sessions` kann bei vollständig archiviertem Wocheninventar dessen
+Terminzahl angeben. `missing_sessions` bleibt ohne vollständigen Einzel-ID-
+Crosswalk unbekannt. Der Report weist diesen Unterschied ausdrücklich aus.
+Planerwerte `planner_registered`, `planner_cancelled`, `planner_linked`,
+`planner_free` und historische `capacity` werden nur über die explizite
+Kursdetail-Beziehung zum selben nativen Termin ergänzt und erhalten ihren
+separaten `planner_observed_at`. Kein Join erfolgt über Label, Zeit oder gleiche
+Zählwerte. Dadurch sind die Kapazitäten der geprüften Nulltermine belegt;
+Kapazitäten nicht einzeln zugeordneter positiver Termine bleiben unbekannt.

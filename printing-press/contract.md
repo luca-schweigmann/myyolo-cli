@@ -67,3 +67,9 @@ Report um Kurslabel, belegte Eintragungen und signierte Teilnahmen. Der
 vollständige Null-/Beleg-/Versionsvertrag steht in `docs/reha-history.md`.
 Die mySIGN-Spec dokumentiert dafür `CourseSession` und `Attendance`; sie behauptet
 keine separate Kursserien-ID, historische Abdeckung oder Kapazität in mySIGN.
+
+`report admin-reha-ranges` verwendet die drei in der Admin-Spec beschriebenen
+Datumsbereich-Routen. Native Buchungs-IDs, Scope-Echo, Tabellen-/Bildsemantik,
+Vollständigkeit und aggregate-safe Ausgabe werden im handgeschriebenen Runtime-
+Parser/Store validiert. Printing Press bleibt Contract-/Generator-Check und
+ersetzt weder diese Prüfungen noch die native Session-/Pacing-Grenze.

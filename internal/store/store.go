@@ -434,6 +434,15 @@ func (store *Store) migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS admin_records_route_idx
 		 ON admin_records(route, table_index)`,
+		`CREATE TABLE IF NOT EXISTS admin_observations (
+			run_id INTEGER PRIMARY KEY REFERENCES sync_runs(id),
+			route TEXT NOT NULL,
+			request_path TEXT NOT NULL,
+			request_body TEXT NOT NULL,
+			observed_at TEXT NOT NULL,
+			schema_fingerprint TEXT NOT NULL,
+			page_json TEXT NOT NULL
+		)`,
 	}
 
 	tx, err := store.db.BeginTx(ctx, nil)
@@ -846,6 +855,19 @@ func (store *Store) ImportAdminPageAt(
 			store.markSyncFailed(ctx, runID, returnErr)
 		}
 	}()
+
+	// Preserve every completed observation, including duplicate rows and A-B-A
+	// changes. The legacy latest-row index remains for existing reports.
+	pageJSON, err := json.Marshal(page)
+	if err != nil {
+		return AdminImportResult{}, fmt.Errorf("encode admin observation")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO admin_observations
+		(run_id, route, request_path, request_body, observed_at, schema_fingerprint, page_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, runID, page.Metadata.Route,
+		page.RequestPath, page.RequestBody, now, page.Metadata.Fingerprint, string(pageJSON)); err != nil {
+		return AdminImportResult{}, fmt.Errorf("preserve admin observation")
+	}
 
 	headingsJSON, err := json.Marshal(page.Metadata.Headings)
 	if err != nil {

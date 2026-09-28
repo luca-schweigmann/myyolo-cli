@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"golang.org/x/net/html"
@@ -22,8 +25,36 @@ const (
 )
 
 type Page struct {
-	Metadata PageMetadata `json:"metadata"`
-	Tables   []Table      `json:"tables,omitempty"`
+	CoursePlannerFacts    *CoursePlannerFacts    `json:"course_planner_facts,omitempty"`
+	CourseRangeFacts      *CourseRangeFacts      `json:"course_range_facts,omitempty"`
+	CourseSessionIdentity *CourseSessionIdentity `json:"course_session_identity,omitempty"`
+	CourseSessionFacts    *CourseSessionFacts    `json:"course_session_facts,omitempty"`
+	Metadata              PageMetadata           `json:"metadata"`
+	Tables                []Table                `json:"tables,omitempty"`
+	// Private provenance; never included in normal CLI output. Only validated
+	// read-capability requests can populate these fields (no login/session data).
+	RequestPath                string                      `json:"-"`
+	RequestBody                string                      `json:"-"`
+	CourseReferences           []CourseReference           `json:"course_references,omitempty"`
+	CourseAttendanceIndicators []CourseAttendanceIndicator `json:"course_attendance_indicators,omitempty"`
+}
+
+// Only course-target identity, never member links, names or signature material.
+type CourseReference struct {
+	CourseID   string `json:"course_id"`
+	Date       string `json:"date"`
+	Planner    string `json:"planner,omitempty"`
+	TableIndex int    `json:"table_index"`
+	RowIndex   int    `json:"row_index"`
+}
+
+// Static UI evidence from the AW column only. No member IDs, URLs, form
+// names/values or signature material are retained in these indicators.
+type CourseAttendanceIndicator struct {
+	TableIndex  int      `json:"table_index"`
+	RowIndex    int      `json:"row_index"`
+	ImageAssets []string `json:"image_assets,omitempty"`
+	Checkboxes  []bool   `json:"checkboxes,omitempty"`
 }
 
 type PageMetadata struct {
@@ -106,7 +137,7 @@ func ParsePage(baseURL *url.URL, route string, document *html.Node) (Page, error
 		return Page{}, err
 	}
 
-	for _, tableNode := range tableNodes {
+	for tableIndex, tableNode := range tableNodes {
 		table, err := parseTable(tableNode)
 		if err != nil {
 			return Page{}, err
@@ -114,6 +145,36 @@ func ParsePage(baseURL *url.URL, route string, document *html.Node) (Page, error
 		page.Tables = append(page.Tables, table)
 		page.Metadata.TableHeaders = append(page.Metadata.TableHeaders, table.Headers)
 		page.Metadata.TableRows = append(page.Metadata.TableRows, len(table.Rows))
+		if route == "capability:course-session" {
+			page.CourseAttendanceIndicators = append(page.CourseAttendanceIndicators, tableAttendanceIndicators(tableNode, tableIndex, table.Headers)...)
+		}
+		if strings.HasPrefix(route, "capability:course-planner-") {
+			page.CourseReferences = append(page.CourseReferences, tableCourseReferences(baseURL, tableNode, tableIndex)...)
+		}
+	}
+	if route == "capability:course-planner-week" {
+		facts, err := parseCoursePlanner(page)
+		if err != nil {
+			return Page{}, err
+		}
+		page.CoursePlannerFacts = facts
+	}
+	if facts, err := parseCourseRange(baseURL, route, document, tableNodes); err != nil {
+		return Page{}, err
+	} else {
+		page.CourseRangeFacts = facts
+	}
+	if route == "capability:course-session" {
+		facts, err := parseCourseSessionFacts(tableNodes)
+		if err != nil {
+			return Page{}, err
+		}
+		page.CourseSessionFacts = facts
+		identity, err := parseCourseSessionIdentity(document)
+		if err != nil {
+			return Page{}, err
+		}
+		page.CourseSessionIdentity = identity
 	}
 	page.Metadata.Links = uniqueTargets(linkTargets)
 	page.Metadata.Forms = uniqueTargets(formTargets)
@@ -146,6 +207,67 @@ func ParsePage(baseURL *url.URL, route string, document *html.Node) (Page, error
 	hash := sha256.Sum256(encoded)
 	page.Metadata.Fingerprint = hex.EncodeToString(hash[:])
 	return page, nil
+}
+
+func tableCourseReferences(base *url.URL, table *html.Node, tableIndex int) []CourseReference {
+	var refs []CourseReference
+	rowIndex := 0
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "tr" && nearestAncestor(n.Parent, "table") == table {
+			header, cells := false, 0
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.ElementNode && (c.Data == "td" || c.Data == "th") {
+					cells++
+					header = header || c.Data == "th"
+				}
+			}
+			if cells > 0 && !(header && rowIndex == 0) {
+				var anchors func(*html.Node)
+				anchors = func(a *html.Node) {
+					if a.Type == html.ElementNode && a.Data == "a" {
+						if ref, ok := courseReference(base, attr(a, "href")); ok {
+							ref.TableIndex = tableIndex
+							ref.RowIndex = rowIndex
+							refs = append(refs, ref)
+						}
+					}
+					for c := a.FirstChild; c != nil; c = c.NextSibling {
+						anchors(c)
+					}
+				}
+				anchors(n)
+				rowIndex++
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(table)
+	return refs
+}
+
+func courseReference(base *url.URL, href string) (CourseReference, bool) {
+	target, err := base.Parse(href)
+	if err != nil || !strings.EqualFold(target.Hostname(), base.Hostname()) || target.Path != "/Kursplaner_WEB/Kursplaner_Teilnehmer_eingabe.asp" {
+		return CourseReference{}, false
+	}
+	query := target.Query()
+	id, when, planner := query.Get("Kurs"), query.Get("Datum"), query.Get("defaultMode")
+	if id == "" || len(id) > 12 || strings.Trim(id, "0123456789") != "" || (planner != "" && planner != "A" && planner != "B") {
+		return CourseReference{}, false
+	}
+	var parsed time.Time
+	for _, layout := range []string{"2006-01-02", "02.01.2006", "2.1.2006"} {
+		if parsed, err = time.Parse(layout, when); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return CourseReference{}, false
+	}
+	return CourseReference{CourseID: id, Date: parsed.Format("2006-01-02"), Planner: planner}, true
 }
 
 func parseTable(tableNode *html.Node) (Table, error) {
@@ -336,4 +458,72 @@ func uniqueTargets(targets []Target) []Target {
 			strings.Join(unique[right].QueryKeys, "\x00")
 	})
 	return unique
+}
+
+var staticAttendanceAsset = regexp.MustCompile(`^[a-zA-Z_-]+\.(gif|png|jpg|jpeg|svg)$`)
+
+func tableAttendanceIndicators(table *html.Node, tableIndex int, headers []string) []CourseAttendanceIndicator {
+	awIndex := -1
+	for i, h := range headers {
+		if strings.EqualFold(strings.TrimSpace(h), "AW") {
+			awIndex = i
+		}
+	}
+	if awIndex < 0 {
+		return nil
+	}
+	var result []CourseAttendanceIndicator
+	rowIndex := 0
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "tr" && nearestAncestor(n.Parent, "table") == table {
+			var cells []*html.Node
+			header := false
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.ElementNode && (c.Data == "td" || c.Data == "th") {
+					cells = append(cells, c)
+					header = header || c.Data == "th"
+				}
+			}
+			if len(cells) > 0 && !(header && rowIndex == 0) {
+				if len(cells) == len(headers) {
+					item := CourseAttendanceIndicator{TableIndex: tableIndex, RowIndex: rowIndex}
+					var extract func(*html.Node)
+					extract = func(c *html.Node) {
+						if c.Type == html.ElementNode && c.Data == "img" {
+							u, err := url.Parse(attr(c, "src"))
+							if err == nil && u.RawQuery == "" {
+								asset := path.Base(u.Path)
+								if staticAttendanceAsset.MatchString(asset) {
+									item.ImageAssets = append(item.ImageAssets, asset)
+								}
+							}
+						}
+						if c.Type == html.ElementNode && c.Data == "input" && strings.EqualFold(attr(c, "type"), "checkbox") {
+							checked := false
+							for _, a := range c.Attr {
+								if strings.EqualFold(a.Key, "checked") {
+									checked = true
+								}
+							}
+							item.Checkboxes = append(item.Checkboxes, checked)
+						}
+						for ch := c.FirstChild; ch != nil; ch = ch.NextSibling {
+							extract(ch)
+						}
+					}
+					extract(cells[awIndex])
+					if len(item.ImageAssets) > 0 || len(item.Checkboxes) > 0 {
+						result = append(result, item)
+					}
+				}
+				rowIndex++
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(table)
+	return result
 }
