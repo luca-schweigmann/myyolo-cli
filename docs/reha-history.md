@@ -122,6 +122,10 @@ Datumsgrenzen und native Buchungsreferenzen. Pagination-Hinweise, Drift und
 fehlende Sammlungen werden abgelehnt. Eine ausdrücklich leere vollständige
 Klassifikation ist 0; eine fehlende Sammlung ist kein 0-Wert.
 
+Scope: Der Report übernimmt alle Kursplaner-Buchungen der drei Range-Routen.
+Diese Routen sind allgemeine Kursrouten; es gibt keinen Reha-Filter und keinen
+belegten Kurstyp. Nicht-Reha-Kurse im selben Kursplaner erscheinen daher ebenfalls.
+
 Die Range-Referenz `KursID` bezeichnet **eine Buchung/einen Termin**, keine
 wiederkehrende Kursserie. Der öffentliche Schlüssel ist ein namensraumgetrennter
 Hash dieser nativen ID. Gleichnamige oder zeitgleiche Termine bleiben getrennt.
@@ -134,6 +138,8 @@ Nur diese ausdrückliche Beziehung erlaubt das optionale `stable_course_id` und
 - `participated = attended`, Status `admin_attendance_classification`. Anzeige:
   **Teilgenommen**, Erklärung: „von myYOLO als anwesend geführt“.
 - `cancelled` bleibt separat und wird nicht auf Eintragungen aufgeschlagen.
+  Fehlt eine Buchung in der vollständig validierten Stornoliste ihres
+  Quellzeitraums, gilt `cancelled = 0` mit dem Zeitpunkt dieser Liste.
 - `signed_participated` bleibt null, bis derselbe native Termin in einer
   Detailbeobachtung AW plus grüne Unterschrift derselben Zeile belegt.
 - `capacity` bleibt null; es wird keine heutige Kapazität historisch zurückgerechnet.
@@ -179,3 +185,16 @@ Kursdetail-Beziehung zum selben nativen Termin ergänzt und erhalten ihren
 separaten `planner_observed_at`. Kein Join erfolgt über Label, Zeit oder gleiche
 Zählwerte. Dadurch sind die Kapazitäten der geprüften Nulltermine belegt;
 Kapazitäten nicht einzeln zugeordneter positiver Termine bleiben unbekannt.
+
+## Follow-up: Contract v2 (koordiniert mit point-analytics)
+
+`admin-reha-ranges.v1` bleibt verhaltensgleich. Ein späteres `v2` soll erst
+gemeinsam mit dem Konsumenten point-analytics eingeführt werden:
+
+- Reha-Filter: Sitzungen nur mit belegtem Reha-Merkmal ausgeben, statt alle
+  Kursplaner-Buchungen der Range-Routen zu übernehmen.
+- Nullable `cancelled`: Fehlt eine Buchung in der Stornoliste, bleiben
+  `cancelled` und `cancellation_observed_at` `null` statt belegter 0.
+- Konsument: `reha_management.py` in point-analytics muss dafür `v2` akzeptieren
+  und `cancelled` sowie `cancellation_observed_at` als nullable prüfen (heute
+  verlangt es eine Ganzzahl und einen Zeitstempel).
