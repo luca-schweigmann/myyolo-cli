@@ -225,7 +225,7 @@ func collectCapability(
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
+			return fmt.Errorf("%w: Profil %q ist nicht konfiguriert; führe myyolo auth login aus", errProfileMissing, *profile)
 		}
 		return err
 	}

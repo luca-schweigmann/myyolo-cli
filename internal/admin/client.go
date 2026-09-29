@@ -37,6 +37,7 @@ var (
 	ErrRequestBudget  = errors.New("myYOLO admin request budget exhausted")
 	ErrRateLimited    = errors.New("myYOLO admin rate limit reached")
 	ErrCAPTCHA        = errors.New("myYOLO admin CAPTCHA encountered")
+	ErrHTTPStatus     = errors.New("myYOLO admin returned an unexpected HTTP status")
 )
 
 var KnownReadPages = []string{
@@ -449,7 +450,7 @@ func (client *Client) readClassifiedPage(
 		return Page{}, ErrSessionExpired
 	}
 	if response.status != http.StatusOK {
-		return Page{}, fmt.Errorf("myYOLO admin returned HTTP %d", response.status)
+		return Page{}, fmt.Errorf("%w: HTTP %d", ErrHTTPStatus, response.status)
 	}
 	page, err := client.parseResponse(routeKey, response)
 	if err != nil {

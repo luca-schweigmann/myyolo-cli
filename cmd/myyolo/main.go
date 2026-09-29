@@ -27,6 +27,7 @@ Verwendung:
   myyolo db snapshot --source-db PATH --output-db PATH --scope-input PATH --receipt PATH
   myyolo db status [--format table|json|csv] [--db PATH]
   myyolo doctor [--profile NAME] [--db PATH]
+  myyolo errors [--format table|json|csv]
   myyolo import mysign --file PATH [--db PATH]
   myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
   myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--format table|json|csv]
@@ -43,12 +44,12 @@ Verwendung:
 
 Zugangsdaten und zwischengespeicherte Sitzungen werden im Betriebssystem-Keyring gespeichert.
 Die CLI ruft niemals einen myYOLO-Schreib-Endpunkt auf. Collect-Läufe sind seriell, verzögert,
-auf eine Capability begrenzt und auf fünf HTTP-Anfragen inklusive Relogin gedeckelt.`
+auf eine Capability begrenzt und auf fünf HTTP-Anfragen inklusive Relogin gedeckelt.
+Bekannte Fehler enden mit einem festen Exit-Code und einer "Zu tun:"-Zeile (Liste: myyolo errors).`
 
 func main() {
 	if err := run(context.Background(), os.Args[1:], os.Stdin, os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "Fehler:", err)
-		os.Exit(1)
+		os.Exit(reportError(os.Stderr, err))
 	}
 }
 
@@ -103,6 +104,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 		}
 	case "doctor":
 		return doctor(ctx, args[1:], stdout)
+	case "errors":
+		return printErrorCodes(args[1:], stdout)
 	case "import":
 		if len(args) >= 2 && args[1] == "mysign" {
 			return importMySign(ctx, args[2:], stdout)

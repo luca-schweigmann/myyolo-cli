@@ -11,30 +11,40 @@ import (
 )
 
 type AdminRehaRangeSession struct {
-	PlannerRegistered      *int     `json:"planner_registered"`
-	PlannerCancelled       *int     `json:"planner_cancelled"`
-	PlannerFree            *int     `json:"planner_free"`
-	PlannerLinked          *int     `json:"planner_linked"`
-	PlannerObservedAt      *string  `json:"planner_observed_at"`
-	StableSessionID        string   `json:"stable_session_id"`
-	StableCourseID         *string  `json:"stable_course_id"`
-	CourseLabel            string   `json:"course_label"`
-	Date                   string   `json:"date"`
-	StartTime              string   `json:"start_time"`
-	EndTime                string   `json:"end_time"`
-	Registered             *int     `json:"registered"`
-	Participated           *int     `json:"participated"`
-	NotAttended            *int     `json:"not_attended"`
-	Cancelled              int      `json:"cancelled"`
-	SignedParticipated     *int     `json:"signed_participated"`
-	Capacity               *int     `json:"capacity"`
-	RegistrationStatus     string   `json:"registration_status"`
-	AttendanceStatus       string   `json:"attendance_status"`
-	RegisteredObservedAt   []string `json:"registered_observed_at"`
-	AttendanceObservedAt   *string  `json:"attendance_observed_at"`
-	CancellationObservedAt string   `json:"cancellation_observed_at"`
-	SignedObservedAt       *string  `json:"signed_observed_at"`
-	PeriodStatus           string   `json:"period_status"`
+	PlannerRegistered      *int              `json:"planner_registered"`
+	PlannerCancelled       *int              `json:"planner_cancelled"`
+	PlannerFree            *int              `json:"planner_free"`
+	PlannerLinked          *int              `json:"planner_linked"`
+	PlannerObservedAt      *string           `json:"planner_observed_at"`
+	StableSessionID        string            `json:"stable_session_id"`
+	StableCourseID         *string           `json:"stable_course_id"`
+	CourseLabel            string            `json:"course_label"`
+	Date                   string            `json:"date"`
+	StartTime              string            `json:"start_time"`
+	EndTime                string            `json:"end_time"`
+	Registered             *int              `json:"registered"`
+	Participated           *int              `json:"participated"`
+	NotAttended            *int              `json:"not_attended"`
+	Cancelled              int               `json:"cancelled"`
+	SignedParticipated     *int              `json:"signed_participated"`
+	Capacity               *int              `json:"capacity"`
+	RegistrationStatus     string            `json:"registration_status"`
+	AttendanceStatus       string            `json:"attendance_status"`
+	RegisteredObservedAt   []string          `json:"registered_observed_at"`
+	AttendanceObservedAt   *string           `json:"attendance_observed_at"`
+	CancellationObservedAt string            `json:"cancellation_observed_at"`
+	SignedObservedAt       *string           `json:"signed_observed_at"`
+	PeriodStatus           string            `json:"period_status"`
+	DataGap                *AdminRehaDataGap `json:"data_gap"`
+}
+
+// AdminRehaDataGap explains why a session metric stays unknown. It is a
+// business-data gap in the Reha administration, not a transport or CLI fault.
+type AdminRehaDataGap struct {
+	Code     string   `json:"code"`
+	Kind     string   `json:"kind"`
+	Missing  []string `json:"missing_classifications"`
+	ActionDE string   `json:"action_de"`
 }
 type AdminRehaRangeWindow struct {
 	From         string `json:"from"`
@@ -56,6 +66,8 @@ type AdminRehaRangeReport struct {
 	CompletedSessionCount int                     `json:"completed_session_count"`
 	AverageRegistered     *float64                `json:"average_registered"`
 	AverageParticipated   *float64                `json:"average_participated"`
+	IncompleteSessions    int                     `json:"incomplete_sessions"`
+	ExcludedSessions      map[string]int          `json:"excluded_sessions"`
 }
 type rangeObservation struct {
 	Facts admin.CourseRangeFacts
@@ -231,6 +243,9 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 	if e != nil {
 		return fail()
 	}
+	// Detail evidence that someone attended vetoes "not held" even when the
+	// range rows lack the attended classification.
+	detailSigned, detailMarked := map[string]bool{}, map[string]bool{}
 	for _, d := range details.Sessions {
 		item, ok := byID[d.StableSessionID]
 		planner := ""
@@ -264,11 +279,27 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 		item.StableCourseID = &course
 		item.SignedParticipated = &sign
 		item.SignedObservedAt = &stamp
+		detailSigned[d.StableSessionID] = d.SignedAttendance > 0
+		detailMarked[d.StableSessionID] = d.AttendanceMarked > 0
 		byID[d.StableSessionID] = item
 	}
 	sumRegistered, sumParticipated, knownRegistered, knownParticipated := 0, 0, 0, 0
-	for _, item := range byID {
+	report.ExcludedSessions = map[string]int{"not_held": 0, "not_yet_held": 0}
+	for id, item := range byID {
+		// Classified after the detail join so a signature can veto "not held".
+		if item.Registered == nil {
+			attendee := item.Participated != nil && *item.Participated > 0
+			item.DataGap = rangeDataGap(item.PeriodStatus == "past_local_day", attendee, item.Participated != nil, item.NotAttended != nil, detailSigned[id], detailMarked[id])
+			byID[id] = item
+		}
 		report.Sessions = append(report.Sessions, item)
+		if item.DataGap != nil {
+			if item.DataGap.Kind == "data_gap" {
+				report.IncompleteSessions++
+			} else {
+				report.ExcludedSessions[item.DataGap.Kind]++
+			}
+		}
 		if item.PeriodStatus == "past_local_day" {
 			report.CompletedSessionCount++
 			if item.Registered != nil {
@@ -303,3 +334,35 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 }
 
 func rangeInt(value int) *int { return &value }
+
+// rangeDataGap names why a session metric is unknown. Kind "data_gap" is an
+// open entry in the Reha administration. Following Luca's rule (29.09.2026),
+// a past session nobody is marked attended for (and nobody signed) counts as "not_held" and a
+// session that has not happened yet as "not_yet_held"; both are excluded from
+// the incomplete count but stay listed. ActionDE is shown to the team verbatim.
+func rangeDataGap(past, attendee, hasAttended, hasNotAttended, signed, marked bool) *AdminRehaDataGap {
+	missing := []string{}
+	if !hasAttended {
+		missing = append(missing, "attended")
+	}
+	if !hasNotAttended {
+		missing = append(missing, "not-attended")
+	}
+	switch {
+	case !past:
+		return &AdminRehaDataGap{Code: "session_not_yet_held", Kind: "not_yet_held", Missing: missing,
+			ActionDE: "Der Termin liegt heute oder in der Zukunft. Nichts zu tun."}
+	case !attendee && !signed && !marked:
+		return &AdminRehaDataGap{Code: "no_attendee_marked", Kind: "not_held", Missing: missing,
+			ActionDE: "Niemand ist als anwesend eingetragen, der Termin zählt als nicht stattgefunden. Nur falls doch jemand da war: Anwesenheit in der Reha-Verwaltung nachtragen."}
+	case !attendee && !signed:
+		return &AdminRehaDataGap{Code: "marked_in_detail_not_in_range", Kind: "data_gap", Missing: missing,
+			ActionDE: "Die Terminansicht zeigt Anwesende, die Kursliste aber nicht. In der Reha-Verwaltung die Anwesenheit dieses Termins prüfen und speichern."}
+	case !attendee:
+		return &AdminRehaDataGap{Code: "signed_but_not_marked_attended", Kind: "data_gap", Missing: missing,
+			ActionDE: "Es liegen Unterschriften vor, aber niemand ist als anwesend eingetragen. In der Reha-Verwaltung die Anwesenheit nachtragen."}
+	default:
+		return &AdminRehaDataGap{Code: "not_attended_list_missing", Kind: "data_gap", Missing: missing,
+			ActionDE: "Für diesen Termin fehlt die Liste „nicht anwesend“. In der Reha-Verwaltung prüfen, ob alle Buchungen als anwesend oder nicht anwesend markiert sind."}
+	}
+}

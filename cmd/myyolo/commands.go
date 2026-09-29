@@ -157,7 +157,7 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
+			return fmt.Errorf("%w: Profil %q ist nicht konfiguriert; führe myyolo auth login aus", errProfileMissing, *profile)
 		}
 		return err
 	}
@@ -170,10 +170,13 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	started := time.Now()
 	snapshot, nextSession, err := client.Fetch(ctx, credentials, session)
+	stats := client.LastFetchStats()
 	if err != nil {
-		return err
+		return fmt.Errorf("%w (Anfragen: %d)", err, stats.Requests)
 	}
+	fetchDuration := time.Since(started)
 	if err := secretStore.SaveMySignSession(*profile, nextSession); err != nil {
 		return err
 	}
@@ -191,7 +194,12 @@ func syncMyYOLO(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return output.Write(stdout, result, "json")
+	return output.Write(stdout, struct {
+		store.ImportResult
+		transport.FetchStats
+		FetchDurationMS int64 `json:"fetch_duration_ms"`
+		DurationMS      int64 `json:"duration_ms"`
+	}{result, stats, fetchDuration.Milliseconds(), time.Since(started).Milliseconds()}, "json")
 }
 
 func syncAdmin(ctx context.Context, args []string, stdout io.Writer) error {
@@ -220,7 +228,7 @@ func syncAdmin(ctx context.Context, args []string, stdout io.Writer) error {
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
+			return fmt.Errorf("%w: Profil %q ist nicht konfiguriert; führe myyolo auth login aus", errProfileMissing, *profile)
 		}
 		return err
 	}
@@ -281,7 +289,7 @@ func discoverAdmin(ctx context.Context, args []string, stdout io.Writer) error {
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
+			return fmt.Errorf("%w: Profil %q ist nicht konfiguriert; führe myyolo auth login aus", errProfileMissing, *profile)
 		}
 		return err
 	}
@@ -344,7 +352,7 @@ func authCheck(ctx context.Context, args []string, stdout io.Writer) error {
 	credentials, err := secretStore.LoadCredentials(*profile)
 	if err != nil {
 		if secrets.IsNotFound(err) {
-			return fmt.Errorf("Profil %q ist nicht konfiguriert; führe myyolo auth login aus", *profile)
+			return fmt.Errorf("%w: Profil %q ist nicht konfiguriert; führe myyolo auth login aus", errProfileMissing, *profile)
 		}
 		return err
 	}

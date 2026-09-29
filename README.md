@@ -30,6 +30,7 @@ Berechtigung und im Rahmen der Vereinbarung, die für deinen Zugang gilt.
 | Vorhandene SQLite-Quelle konsistent privat snapshotten | `myyolo db snapshot` | 0 |
 | Datenbankintegrität und Gesamtstatus prüfen | `myyolo db status` | 0 |
 | Schlüsselbund und Datenbank prüfen | `myyolo doctor` | 0 |
+| Fehlercodes mit Exit-Code und Handlungshinweis auflisten | `myyolo errors` | 0 |
 | Lokalen Snapshot offline importieren | `myyolo import mysign` | 0 |
 | Gesamtzahlen zu Sammlung und Anwesenheit anzeigen | `myyolo report summary` | 0 |
 | Anwesenheit nach Kurs auswerten | `myyolo report courses` | 0 |
@@ -430,6 +431,35 @@ teilweisen Datenbankimport. Fehler bei Anmeldung oder HTTP, zu große Antworten,
 unbekannte Schemas und fehlerhafte Querverweise führen zu einem Exit-Code
 ungleich null.
 
+Die JSON-Ausgabe enthält neben den Importzahlen `requests_used` (tatsächlich
+gesendete HTTP-Anfragen inklusive Login), `relogin` (eine gespeicherte Sitzung
+wurde durch einen erfolgreichen neuen Login ersetzt), `fetch_duration_ms` und
+`duration_ms`. Bei einem Fehler nennt die Fehlermeldung die bis dahin
+gesendeten Anfragen.
+
+### Fehlercodes
+
+Bekannte Fehlerklassen enden mit einem festen Exit-Code. Auf stderr steht
+`Fehler: CODE: Detail` und eine Zeile `Zu tun: …`. Die vollständige Liste
+liefert `myyolo errors [--format table|json|csv]`:
+
+| Code | Exit |
+|---|---|
+| `NETWORK_TLS_CERTIFICATE_INVALID` | 10 |
+| `NETWORK_TIMEOUT` | 11 |
+| `NETWORK_UNREACHABLE` | 12 |
+| `AUTH_PROFILE_MISSING` | 20 |
+| `AUTH_REJECTED` | 21 |
+| `AUTH_SESSION_EXPIRED` | 22 |
+| `PROVIDER_RATE_LIMITED` | 30 |
+| `PROVIDER_CAPTCHA` | 31 |
+| `PROVIDER_HTTP_ERROR` | 32 |
+| `PROVIDER_SCHEMA_DRIFT` | 40 |
+| `REQUEST_BUDGET_EXHAUSTED` | 41 |
+
+Codes und Exit-Codes behalten ihre Bedeutung; neue Klassen erhalten neue
+Nummern. Alle übrigen Fehler enden wie bisher mit Exit-Code 1.
+
 ### Admin-Synchronisation und Erkennung
 
 ```bash
@@ -697,6 +727,7 @@ myyolo db init [--db PATH]
 myyolo db snapshot --source-db PATH --output-db PATH --scope-input PATH --receipt PATH
 myyolo db status [--format table|json|csv] [--db PATH]
 myyolo doctor [--profile NAME] [--db PATH]
+myyolo errors [--format table|json|csv]
 myyolo import mysign --file PATH [--db PATH]
 myyolo report summary|courses|days|hours|sessions [--as-of RFC3339] [--format table|json|csv] [--db PATH]
 myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--format table|json|csv]

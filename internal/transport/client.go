@@ -29,6 +29,8 @@ var (
 	ErrAuthentication = errors.New("myYOLO authentication failed")
 	ErrSchemaDrift    = errors.New("myYOLO response schema changed")
 	ErrRequestBudget  = errors.New("myYOLO request budget exhausted")
+	ErrRateLimited    = errors.New("myYOLO rate limit reached")
+	ErrHTTPStatus     = errors.New("myYOLO returned an unexpected HTTP status")
 )
 
 type Client struct {
@@ -38,6 +40,14 @@ type Client struct {
 	sleep    func(context.Context, time.Duration) error
 	mu       sync.Mutex
 	lastCall time.Time
+	stats    FetchStats
+}
+
+// FetchStats describes the last Fetch: HTTP requests actually sent (including
+// login) and whether a cached session was replaced by a successful fresh login.
+type FetchStats struct {
+	Requests int  `json:"requests_used"`
+	Relogin  bool `json:"relogin"`
 }
 
 type Option func(*Client)
@@ -105,6 +115,8 @@ func (client *Client) Fetch(
 
 	client.restoreCookies(session)
 	budget := newBudget(maxFetchCalls)
+	client.stats = FetchStats{}
+	defer func() { client.stats.Requests = budget.sent }()
 	if session.NextRequestToken != "" {
 		snapshot, nextSession, err := client.read(ctx, session.NextRequestToken, budget)
 		if err == nil {
@@ -119,11 +131,19 @@ func (client *Client) Fetch(
 	if err != nil {
 		return mysign.Snapshot{}, secrets.Session{}, err
 	}
+	client.stats.Relogin = session.NextRequestToken != ""
 	snapshot, nextSession, err := client.read(ctx, fresh.NextRequestToken, budget)
 	if err != nil {
 		return mysign.Snapshot{}, secrets.Session{}, err
 	}
 	return snapshot, nextSession, nil
+}
+
+// LastFetchStats reports the request usage of the most recent Fetch.
+func (client *Client) LastFetchStats() FetchStats {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.stats
 }
 
 func (client *Client) login(
@@ -227,6 +247,7 @@ func (client *Client) postJSON(
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("User-Agent", "myyolo-cli")
 
+	budget.sent++
 	response, err := client.http.Do(request)
 	client.lastCall = time.Now()
 	if err != nil {
@@ -237,10 +258,10 @@ func (client *Client) postJSON(
 		return nil, ErrSessionExpired
 	}
 	if response.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("myYOLO rate limit: retry later")
+		return nil, ErrRateLimited
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("myYOLO returned HTTP %d", response.StatusCode)
+		return nil, fmt.Errorf("%w: HTTP %d", ErrHTTPStatus, response.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
 	if err != nil {
@@ -274,6 +295,7 @@ func (client *Client) captureSession(token string) secrets.Session {
 
 type requestBudget struct {
 	remaining int
+	sent      int
 }
 
 func newBudget(limit int) *requestBudget {

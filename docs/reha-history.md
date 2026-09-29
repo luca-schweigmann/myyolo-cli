@@ -186,6 +186,27 @@ separaten `planner_observed_at`. Kein Join erfolgt über Label, Zeit oder gleich
 Zählwerte. Dadurch sind die Kapazitäten der geprüften Nulltermine belegt;
 Kapazitäten nicht einzeln zugeordneter positiver Termine bleiben unbekannt.
 
+### Offene Termine: `data_gap`
+
+Jeder Termin mit unbekannten `registered` trägt ein additives Feld `data_gap`
+(`code`, `kind`, `missing_classifications`, `action_de`), alle anderen `null`.
+Der Report-Kopf zählt `incomplete_sessions` (nur `kind=data_gap`) und
+`excluded_sessions` (`not_held`, `not_yet_held`). Nach Lucas Regel vom
+29.09.2026 ist ein Termin ohne eine als anwesend markierte Person keine
+Datenlücke:
+
+| `kind` | `code` | Bedeutung |
+|---|---|---|
+| `not_yet_held` | `session_not_yet_held` | Termin heute oder später |
+| `not_held` | `no_attendee_marked` | vergangen, niemand anwesend markiert (Zeile fehlt oder 0), keine Unterschrift und keine Markierung in der Terminansicht |
+| `data_gap` | `signed_but_not_marked_attended` | Unterschriften vorhanden, aber niemand anwesend markiert |
+| `data_gap` | `marked_in_detail_not_in_range` | Terminansicht zeigt Anwesende ohne Unterschrift, die Kursliste nicht |
+| `data_gap` | `not_attended_list_missing` | Anwesende bekannt, Liste „nicht anwesend“ fehlt |
+
+Die Werte selbst bleiben unverändert `null`; ausgenommene Termine bleiben im
+Report und gehen weiterhin nicht in die Durchschnitte ein. `action_de` ist ein
+Handlungshinweis für das Team, kein Fehlertext.
+
 ## Follow-up: Contract v2 (koordiniert mit point-analytics)
 
 `admin-reha-ranges.v1` bleibt verhaltensgleich. Ein späteres `v2` soll erst
