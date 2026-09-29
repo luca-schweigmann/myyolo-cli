@@ -198,8 +198,9 @@ Datenlücke:
 | `kind` | `code` | Bedeutung |
 |---|---|---|
 | `not_yet_held` | `session_not_yet_held` | Termin heute oder später |
-| `not_held` | `no_attendee_marked` | vergangen, niemand anwesend markiert (Zeile fehlt oder 0), keine Unterschrift |
+| `not_held` | `no_attendee_marked` | vergangen, niemand anwesend markiert (Zeile fehlt oder 0), keine Unterschrift und keine Markierung in der Terminansicht |
 | `data_gap` | `signed_but_not_marked_attended` | Unterschriften vorhanden, aber niemand anwesend markiert |
+| `data_gap` | `marked_in_detail_not_in_range` | Terminansicht zeigt Anwesende ohne Unterschrift, die Kursliste nicht |
 | `data_gap` | `not_attended_list_missing` | Anwesende bekannt, Liste „nicht anwesend“ fehlt |
 
 Die Werte selbst bleiben unverändert `null`; ausgenommene Termine bleiben im

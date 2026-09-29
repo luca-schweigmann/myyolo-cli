@@ -116,6 +116,7 @@ func (client *Client) Fetch(
 	client.restoreCookies(session)
 	budget := newBudget(maxFetchCalls)
 	client.stats = FetchStats{}
+	defer func() { client.stats.Requests = budget.sent }()
 	if session.NextRequestToken != "" {
 		snapshot, nextSession, err := client.read(ctx, session.NextRequestToken, budget)
 		if err == nil {
@@ -246,7 +247,7 @@ func (client *Client) postJSON(
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("User-Agent", "myyolo-cli")
 
-	client.stats.Requests++
+	budget.sent++
 	response, err := client.http.Do(request)
 	client.lastCall = time.Now()
 	if err != nil {
@@ -294,6 +295,7 @@ func (client *Client) captureSession(token string) secrets.Session {
 
 type requestBudget struct {
 	remaining int
+	sent      int
 }
 
 func newBudget(limit int) *requestBudget {

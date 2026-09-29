@@ -228,18 +228,19 @@ func TestAdminRangeOneMissingAttendanceKeepsOtherSessions(t *testing.T) {
 
 func TestRangeDataGapClassification(t *testing.T) {
 	for _, tc := range []struct {
-		name                                           string
-		past, attendee, hasAttended, hasNotAtt, signed bool
-		code, kind                                     string
+		name                                                   string
+		past, attendee, hasAttended, hasNotAtt, signed, marked bool
+		code, kind                                             string
 	}{
-		{"future", false, false, false, true, false, "session_not_yet_held", "not_yet_held"},
-		{"no attended row", true, false, false, true, false, "no_attendee_marked", "not_held"},
-		{"zero attended", true, false, true, false, false, "no_attendee_marked", "not_held"},
-		{"only cancellations", true, false, false, false, false, "no_attendee_marked", "not_held"},
-		{"signature vetoes not held", true, false, false, true, true, "signed_but_not_marked_attended", "data_gap"},
-		{"attendees but no not-attended list", true, true, true, false, false, "not_attended_list_missing", "data_gap"},
+		{"future", false, false, false, true, false, false, "session_not_yet_held", "not_yet_held"},
+		{"no attended row", true, false, false, true, false, false, "no_attendee_marked", "not_held"},
+		{"zero attended", true, false, true, false, false, false, "no_attendee_marked", "not_held"},
+		{"only cancellations", true, false, false, false, false, false, "no_attendee_marked", "not_held"},
+		{"signature vetoes not held", true, false, false, true, true, true, "signed_but_not_marked_attended", "data_gap"},
+		{"marked in detail vetoes not held", true, false, false, true, false, true, "marked_in_detail_not_in_range", "data_gap"},
+		{"attendees but no not-attended list", true, true, true, false, false, false, "not_attended_list_missing", "data_gap"},
 	} {
-		gap := rangeDataGap(tc.past, tc.attendee, tc.hasAttended, tc.hasNotAtt, tc.signed)
+		gap := rangeDataGap(tc.past, tc.attendee, tc.hasAttended, tc.hasNotAtt, tc.signed, tc.marked)
 		if gap.Code != tc.code || gap.Kind != tc.kind || gap.ActionDE == "" {
 			t.Errorf("%s: got %s/%s", tc.name, gap.Code, gap.Kind)
 		}
@@ -272,7 +273,7 @@ func TestAdminRangeMarkedAttendanceInDetailVetoesNotHeld(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Sessions) != 1 || report.Sessions[0].DataGap == nil || report.Sessions[0].DataGap.Kind != "data_gap" || report.IncompleteSessions != 1 || report.ExcludedSessions["not_held"] != 0 {
+	if len(report.Sessions) != 1 || report.Sessions[0].DataGap == nil || report.Sessions[0].DataGap.Code != "marked_in_detail_not_in_range" || report.IncompleteSessions != 1 || report.ExcludedSessions["not_held"] != 0 {
 		t.Fatalf("marked attendance in detail must keep the session incomplete: %+v %d %v", report.Sessions, report.IncompleteSessions, report.ExcludedSessions)
 	}
 }

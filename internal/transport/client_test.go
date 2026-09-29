@@ -238,4 +238,10 @@ func TestFirstLoginIsNotRelogin(t *testing.T) {
 	if stats := client.LastFetchStats(); stats != (FetchStats{Requests: 2, Relogin: false}) {
 		t.Fatalf("stats = %+v", stats)
 	}
+	if _, err := client.Login(context.Background(), secrets.Credentials{PartnerNumber: "p", Username: "u", Password: "secret"}); err != nil {
+		t.Fatal(err)
+	}
+	if stats := client.LastFetchStats(); stats != (FetchStats{Requests: 2, Relogin: false}) {
+		t.Fatalf("standalone login changed fetch stats: %+v", stats)
+	}
 }

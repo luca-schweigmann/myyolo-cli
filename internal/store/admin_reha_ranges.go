@@ -245,7 +245,7 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 	}
 	// Detail evidence that someone attended vetoes "not held" even when the
 	// range rows lack the attended classification.
-	detailAttended := map[string]bool{}
+	detailSigned, detailMarked := map[string]bool{}, map[string]bool{}
 	for _, d := range details.Sessions {
 		item, ok := byID[d.StableSessionID]
 		planner := ""
@@ -279,9 +279,8 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 		item.StableCourseID = &course
 		item.SignedParticipated = &sign
 		item.SignedObservedAt = &stamp
-		if d.SignedAttendance > 0 || d.AttendanceMarked > 0 {
-			detailAttended[d.StableSessionID] = true
-		}
+		detailSigned[d.StableSessionID] = d.SignedAttendance > 0
+		detailMarked[d.StableSessionID] = d.AttendanceMarked > 0
 		byID[d.StableSessionID] = item
 	}
 	sumRegistered, sumParticipated, knownRegistered, knownParticipated := 0, 0, 0, 0
@@ -289,9 +288,8 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 	for id, item := range byID {
 		// Classified after the detail join so a signature can veto "not held".
 		if item.Registered == nil {
-			signed := item.SignedParticipated != nil && *item.SignedParticipated > 0 || detailAttended[id]
 			attendee := item.Participated != nil && *item.Participated > 0
-			item.DataGap = rangeDataGap(item.PeriodStatus == "past_local_day", attendee, item.Participated != nil, item.NotAttended != nil, signed)
+			item.DataGap = rangeDataGap(item.PeriodStatus == "past_local_day", attendee, item.Participated != nil, item.NotAttended != nil, detailSigned[id], detailMarked[id])
 			byID[id] = item
 		}
 		report.Sessions = append(report.Sessions, item)
@@ -342,7 +340,7 @@ func rangeInt(value int) *int { return &value }
 // a past session nobody is marked attended for (and nobody signed) counts as "not_held" and a
 // session that has not happened yet as "not_yet_held"; both are excluded from
 // the incomplete count but stay listed. ActionDE is shown to the team verbatim.
-func rangeDataGap(past, attendee, hasAttended, hasNotAttended, signed bool) *AdminRehaDataGap {
+func rangeDataGap(past, attendee, hasAttended, hasNotAttended, signed, marked bool) *AdminRehaDataGap {
 	missing := []string{}
 	if !hasAttended {
 		missing = append(missing, "attended")
@@ -354,9 +352,12 @@ func rangeDataGap(past, attendee, hasAttended, hasNotAttended, signed bool) *Adm
 	case !past:
 		return &AdminRehaDataGap{Code: "session_not_yet_held", Kind: "not_yet_held", Missing: missing,
 			ActionDE: "Der Termin liegt heute oder in der Zukunft. Nichts zu tun."}
-	case !attendee && !signed:
+	case !attendee && !signed && !marked:
 		return &AdminRehaDataGap{Code: "no_attendee_marked", Kind: "not_held", Missing: missing,
 			ActionDE: "Niemand ist als anwesend eingetragen, der Termin zählt als nicht stattgefunden. Nur falls doch jemand da war: Anwesenheit in der Reha-Verwaltung nachtragen."}
+	case !attendee && !signed:
+		return &AdminRehaDataGap{Code: "marked_in_detail_not_in_range", Kind: "data_gap", Missing: missing,
+			ActionDE: "Die Terminansicht zeigt Anwesende, die Kursliste aber nicht. In der Reha-Verwaltung die Anwesenheit dieses Termins prüfen und speichern."}
 	case !attendee:
 		return &AdminRehaDataGap{Code: "signed_but_not_marked_attended", Kind: "data_gap", Missing: missing,
 			ActionDE: "Es liegen Unterschriften vor, aber niemand ist als anwesend eingetragen. In der Reha-Verwaltung die Anwesenheit nachtragen."}
