@@ -29,6 +29,8 @@ var (
 	ErrAuthentication = errors.New("myYOLO authentication failed")
 	ErrSchemaDrift    = errors.New("myYOLO response schema changed")
 	ErrRequestBudget  = errors.New("myYOLO request budget exhausted")
+	ErrRateLimited    = errors.New("myYOLO rate limit reached")
+	ErrHTTPStatus     = errors.New("myYOLO returned an unexpected HTTP status")
 )
 
 type Client struct {
@@ -38,6 +40,14 @@ type Client struct {
 	sleep    func(context.Context, time.Duration) error
 	mu       sync.Mutex
 	lastCall time.Time
+	stats    FetchStats
+}
+
+// FetchStats describes the last Fetch: HTTP requests actually sent (including
+// login) and whether the cached session had to be replaced by a fresh login.
+type FetchStats struct {
+	Requests int  `json:"requests_used"`
+	Relogin  bool `json:"relogin"`
 }
 
 type Option func(*Client)
@@ -105,6 +115,8 @@ func (client *Client) Fetch(
 
 	client.restoreCookies(session)
 	budget := newBudget(maxFetchCalls)
+	client.stats = FetchStats{}
+	defer func() { client.stats.Requests = maxFetchCalls - budget.remaining }()
 	if session.NextRequestToken != "" {
 		snapshot, nextSession, err := client.read(ctx, session.NextRequestToken, budget)
 		if err == nil {
@@ -115,6 +127,7 @@ func (client *Client) Fetch(
 		}
 	}
 
+	client.stats.Relogin = true
 	fresh, err := client.login(ctx, credentials, budget)
 	if err != nil {
 		return mysign.Snapshot{}, secrets.Session{}, err
@@ -124,6 +137,13 @@ func (client *Client) Fetch(
 		return mysign.Snapshot{}, secrets.Session{}, err
 	}
 	return snapshot, nextSession, nil
+}
+
+// LastFetchStats reports the request usage of the most recent Fetch.
+func (client *Client) LastFetchStats() FetchStats {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.stats
 }
 
 func (client *Client) login(
@@ -237,10 +257,10 @@ func (client *Client) postJSON(
 		return nil, ErrSessionExpired
 	}
 	if response.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("myYOLO rate limit: retry later")
+		return nil, ErrRateLimited
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("myYOLO returned HTTP %d", response.StatusCode)
+		return nil, fmt.Errorf("%w: HTTP %d", ErrHTTPStatus, response.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
 	if err != nil {

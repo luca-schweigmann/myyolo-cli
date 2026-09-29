@@ -41,6 +41,9 @@ func TestFetchUsesCachedSessionInOneRequest(t *testing.T) {
 	if calls != 1 || session.NextRequestToken != "next" {
 		t.Fatalf("calls = %d, session = %#v", calls, session)
 	}
+	if stats := client.LastFetchStats(); stats != (FetchStats{Requests: 1, Relogin: false}) {
+		t.Fatalf("stats = %+v", stats)
+	}
 }
 
 func TestFetchRelogsInExactlyOnce(t *testing.T) {
@@ -72,6 +75,9 @@ func TestFetchRelogsInExactlyOnce(t *testing.T) {
 	if session.NextRequestToken != "rotated" {
 		t.Fatalf("token = %q", session.NextRequestToken)
 	}
+	if stats := client.LastFetchStats(); stats != (FetchStats{Requests: 3, Relogin: true}) {
+		t.Fatalf("stats = %+v", stats)
+	}
 }
 
 func TestFetchNeverMakesFourthRequest(t *testing.T) {
@@ -94,6 +100,9 @@ func TestFetchNeverMakesFourthRequest(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Fatalf("calls = %d, want 3", calls)
+	}
+	if stats := client.LastFetchStats(); stats.Requests != 3 {
+		t.Fatalf("failed fetch must still report its requests: %+v", stats)
 	}
 }
 
