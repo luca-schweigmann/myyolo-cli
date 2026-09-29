@@ -219,3 +219,23 @@ func mustURL(t *testing.T, rawURL string) *url.URL {
 	}
 	return parsed
 }
+
+func TestFirstLoginIsNotRelogin(t *testing.T) {
+	client := testClient(t, func(request *http.Request) string {
+		if request.URL.Path == "/Home/LoginUser" {
+			return `{"nextRequestToken":"fresh"}`
+		}
+		return syntheticSnapshot("next")
+	})
+	_, _, err := client.Fetch(
+		context.Background(),
+		secrets.Credentials{PartnerNumber: "p", Username: "u", Password: "secret"},
+		secrets.Session{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats := client.LastFetchStats(); stats != (FetchStats{Requests: 2, Relogin: false}) {
+		t.Fatalf("stats = %+v", stats)
+	}
+}

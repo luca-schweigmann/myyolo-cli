@@ -44,7 +44,7 @@ type Client struct {
 }
 
 // FetchStats describes the last Fetch: HTTP requests actually sent (including
-// login) and whether the cached session had to be replaced by a fresh login.
+// login) and whether a cached session was replaced by a successful fresh login.
 type FetchStats struct {
 	Requests int  `json:"requests_used"`
 	Relogin  bool `json:"relogin"`
@@ -116,7 +116,6 @@ func (client *Client) Fetch(
 	client.restoreCookies(session)
 	budget := newBudget(maxFetchCalls)
 	client.stats = FetchStats{}
-	defer func() { client.stats.Requests = maxFetchCalls - budget.remaining }()
 	if session.NextRequestToken != "" {
 		snapshot, nextSession, err := client.read(ctx, session.NextRequestToken, budget)
 		if err == nil {
@@ -127,11 +126,11 @@ func (client *Client) Fetch(
 		}
 	}
 
-	client.stats.Relogin = true
 	fresh, err := client.login(ctx, credentials, budget)
 	if err != nil {
 		return mysign.Snapshot{}, secrets.Session{}, err
 	}
+	client.stats.Relogin = session.NextRequestToken != ""
 	snapshot, nextSession, err := client.read(ctx, fresh.NextRequestToken, budget)
 	if err != nil {
 		return mysign.Snapshot{}, secrets.Session{}, err
@@ -247,6 +246,7 @@ func (client *Client) postJSON(
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("User-Agent", "myyolo-cli")
 
+	client.stats.Requests++
 	response, err := client.http.Do(request)
 	client.lastCall = time.Now()
 	if err != nil {

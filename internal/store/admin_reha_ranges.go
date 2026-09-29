@@ -243,6 +243,9 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 	if e != nil {
 		return fail()
 	}
+	// Detail evidence that someone attended vetoes "not held" even when the
+	// range rows lack the attended classification.
+	detailAttended := map[string]bool{}
 	for _, d := range details.Sessions {
 		item, ok := byID[d.StableSessionID]
 		planner := ""
@@ -276,6 +279,9 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 		item.StableCourseID = &course
 		item.SignedParticipated = &sign
 		item.SignedObservedAt = &stamp
+		if d.SignedAttendance > 0 || d.AttendanceMarked > 0 {
+			detailAttended[d.StableSessionID] = true
+		}
 		byID[d.StableSessionID] = item
 	}
 	sumRegistered, sumParticipated, knownRegistered, knownParticipated := 0, 0, 0, 0
@@ -283,7 +289,7 @@ func (s *ReadOnlyStore) AdminRehaRanges(ctx context.Context, from, to, asOf time
 	for id, item := range byID {
 		// Classified after the detail join so a signature can veto "not held".
 		if item.Registered == nil {
-			signed := item.SignedParticipated != nil && *item.SignedParticipated > 0
+			signed := item.SignedParticipated != nil && *item.SignedParticipated > 0 || detailAttended[id]
 			attendee := item.Participated != nil && *item.Participated > 0
 			item.DataGap = rangeDataGap(item.PeriodStatus == "past_local_day", attendee, item.Participated != nil, item.NotAttended != nil, signed)
 			byID[id] = item

@@ -432,7 +432,8 @@ unbekannte Schemas und fehlerhafte Querverweise führen zu einem Exit-Code
 ungleich null.
 
 Die JSON-Ausgabe enthält neben den Importzahlen `requests_used` (tatsächlich
-gesendete HTTP-Anfragen inklusive Login), `relogin`, `fetch_duration_ms` und
+gesendete HTTP-Anfragen inklusive Login), `relogin` (eine gespeicherte Sitzung
+wurde durch einen erfolgreichen neuen Login ersetzt), `fetch_duration_ms` und
 `duration_ms`. Bei einem Fehler nennt die Fehlermeldung die bis dahin
 gesendeten Anfragen.
 

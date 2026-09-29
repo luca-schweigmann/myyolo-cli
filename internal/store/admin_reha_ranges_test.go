@@ -245,3 +245,34 @@ func TestRangeDataGapClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminRangeMarkedAttendanceInDetailVetoesNotHeld(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "marked.sqlite")
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamp := mustUTC(t, "2026-09-16T09:00:00Z")
+	row := admin.CourseRangeRow{BookingID: "200001", CourseLabel: "Synthetic", Date: "2026-09-15", StartTime: "10:00", EndTime: "10:45", Count: 4}
+	seedRange(t, db, "attended", nil, stamp)
+	seedRange(t, db, "not-attended", []admin.CourseRangeRow{row}, stamp)
+	seedRange(t, db, "cancelled", nil, stamp)
+	detail := admin.Page{Metadata: admin.PageMetadata{Route: "capability:course-session", Fingerprint: strings.Repeat("c", 64)}, RequestPath: "/Kursplaner_WEB/Kursplaner_Teilnehmer_eingabe.asp?Kurs=4242&Datum=15.09.2026", CourseSessionIdentity: &admin.CourseSessionIdentity{BookingID: "200001", Date: "2026-09-15"}, CourseSessionFacts: &admin.CourseSessionFacts{Registered: 6, AttendanceMarked: 2, SignedAttendance: 0, Completeness: "validated_observed_roster", CancellationStatus: "unknown_not_provided"}}
+	if _, err := db.ImportAdminPageAt(ctx, detail, stamp); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	ro, err := OpenReadOnly(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	report, err := ro.AdminRehaRanges(ctx, mustBerlinDate(t, "2026-09-14"), mustBerlinDate(t, "2026-09-16"), stamp.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Sessions) != 1 || report.Sessions[0].DataGap == nil || report.Sessions[0].DataGap.Kind != "data_gap" || report.IncompleteSessions != 1 || report.ExcludedSessions["not_held"] != 0 {
+		t.Fatalf("marked attendance in detail must keep the session incomplete: %+v %d %v", report.Sessions, report.IncompleteSessions, report.ExcludedSessions)
+	}
+}
