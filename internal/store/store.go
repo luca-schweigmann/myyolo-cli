@@ -1236,10 +1236,6 @@ func (store *Store) SummaryAt(ctx context.Context, asOf time.Time) (Summary, err
 	return summary, nil
 }
 
-func (store *Store) Courses(ctx context.Context) ([]CourseReport, error) {
-	return store.CoursesAt(ctx, time.Now())
-}
-
 func (store *Store) CoursesAt(ctx context.Context, asOf time.Time) ([]CourseReport, error) {
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT
@@ -1291,10 +1287,6 @@ func (store *Store) CoursesAt(ctx context.Context, asOf time.Time) ([]CourseRepo
 	return report, rows.Err()
 }
 
-func (store *Store) Days(ctx context.Context) ([]DayReport, error) {
-	return store.DaysAt(ctx, time.Now())
-}
-
 func (store *Store) DaysAt(ctx context.Context, asOf time.Time) ([]DayReport, error) {
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT
@@ -1344,10 +1336,6 @@ func (store *Store) DaysAt(ctx context.Context, asOf time.Time) ([]DayReport, er
 		report = append(report, item)
 	}
 	return report, rows.Err()
-}
-
-func (store *Store) Hours(ctx context.Context) ([]HourReport, error) {
-	return store.HoursAt(ctx, time.Now())
 }
 
 func (store *Store) HoursAt(ctx context.Context, asOf time.Time) ([]HourReport, error) {

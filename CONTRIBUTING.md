@@ -2,9 +2,13 @@
 
 Verwende Go 1.26.5 oder neuer und führe `make check` aus.
 
-Änderungen an der Netzwerkgrenze brauchen Tests für die exakte Allowlist aus
-Methode, Host, Pfad und Query, die quellenspezifische Sitzungstrennung, das
-Abfragebudget, den Abstand und den einmaligen erneuten Login. Füge keine
+Pro Nutzerflow gibt es einen E2E-Test gegen die gebaute CLI mit synthetischen
+Daten. Neue Features erhalten ihren Flow-Test. Unit-, Komponenten-, Property-
+und Contract-Tests werden nicht ergänzt.
+
+Die Netzwerkgrenze wahrt die exakte Allowlist aus Methode, Host, Pfad und Query,
+die quellenspezifische Sitzungstrennung, das Abfragebudget, den Abstand und den
+einmaligen erneuten Login. Füge keine
 schreibende Serverroute, nicht klassifizierte Formularübermittlung,
 automatisierte Mitglieder-Detailabfragen, CAPTCHA-Behandlung oder Umgehung von
 Rate Limits hinzu. Jede typisierte Sammlung bleibt auf eine Funktion pro Lauf

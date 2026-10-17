@@ -74,18 +74,6 @@ func WithRequestBudget(limit int) Option {
 	}
 }
 
-func WithSleeper(sleeper func(context.Context, time.Duration) error) Option {
-	return func(client *Client) {
-		client.sleep = sleeper
-	}
-}
-
-func WithClock(now func() time.Time) Option {
-	return func(client *Client) {
-		client.now = now
-	}
-}
-
 func New(httpClient *http.Client, options ...Option) (*Client, error) {
 	baseURL, err := url.Parse(DefaultBaseURL)
 	if err != nil {

@@ -817,12 +817,12 @@ Mitgliederexporte an ein Issue.
 
 ```bash
 make format  # Go-Quellcode formatieren
-make test    # Testsuite mit Race-Erkennung
+make test    # CLI-Flowtests
 make check   # Format-, Modul-, Vet-, Race- und Build-Prüfungen
 make build   # lokale Binärdatei unter bin/myyolo
 ```
 
-Die Tests prüfen je einen Offline-Nutzerflow über den echten CLI-Dispatcher
+Die Tests prüfen je einen Offline-Nutzerflow über die gebaute CLI
 und temporäre SQLite-Datenbanken: Import und Reports, Katalog, Sammlungs-
 Trockenlauf, Datenbankstatus, Reha-Snapshot und Terminreport, Historie,
 Inaktivitätsstatus, Admin-Termine und -Zeiträume sowie Verordnungskennzahlen.
