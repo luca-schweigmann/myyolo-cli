@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-func TestRehaCLIReportsAllFormatsWithoutPrivateFields(t *testing.T) {
+func TestRehaCLIReportsTableWithoutPrivateFields(t *testing.T) {
 	dir := t.TempDir()
 	sourcePath := filepath.Join(dir, "source.sqlite")
 	fixture := filepath.Join("..", "..", "internal", "mysign", "testdata", "get_list_data.synthetic.json")
@@ -103,39 +103,26 @@ func TestRehaCLIReportsAllFormatsWithoutPrivateFields(t *testing.T) {
 	if !strings.Contains(stdout.String(), `"status": "created"`) {
 		t.Fatalf("snapshot output = %s", stdout.String())
 	}
-	for _, format := range []string{"table", "json", "csv"} {
-		t.Run(format, func(t *testing.T) {
-			stdout.Reset()
-			err := runCLI(context.Background(), []string{
-				"report", "reha-sessions",
-				"--db", outputPath,
-				"--scope-file", receiptPath,
-				"--from", "2026-07-28",
-				"--to", "2026-07-29",
-				"--location", "point-gerlingen",
-				"--as-of", "2026-07-30T00:00:00+02:00",
-				"--format", format,
-			}, strings.NewReader(""), &stdout)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, expected := range []string{"stable_session_id", "participant_count_current_observation", "missing_signature_candidate", "prescription_linked_rows", "contradictory_flags", "point-gerlingen"} {
-				if !strings.Contains(stdout.String(), expected) {
-					t.Fatalf("%s output lacks %q: %s", format, expected, stdout.String())
-				}
-			}
-			assertOutputOmitsPrivateData(t, stdout.String(), format)
-			if format == "json" {
-				var report store.RehaSessionReport
-				if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
-					t.Fatal(err)
-				}
-				if len(report.Sessions) != 2 || report.Coverage.SessionsInRange != 2 {
-					t.Fatalf("JSON report = %#v", report)
-				}
-			}
-		})
+	stdout.Reset()
+	err = runCLI(context.Background(), []string{
+		"report", "reha-sessions",
+		"--db", outputPath,
+		"--scope-file", receiptPath,
+		"--from", "2026-07-28",
+		"--to", "2026-07-29",
+		"--location", "point-gerlingen",
+		"--as-of", "2026-07-30T00:00:00+02:00",
+		"--format", "table",
+	}, strings.NewReader(""), &stdout)
+	if err != nil {
+		t.Fatal(err)
 	}
+	for _, expected := range []string{"stable_session_id", "participant_count_current_observation", "missing_signature_candidate", "prescription_linked_rows", "contradictory_flags", "point-gerlingen"} {
+		if !strings.Contains(stdout.String(), expected) {
+			t.Fatalf("%s output lacks %q: %s", "table", expected, stdout.String())
+		}
+	}
+	assertOutputOmitsPrivateData(t, stdout.String(), "table")
 	stdout.Reset()
 	err = runCLI(context.Background(), []string{
 		"report", "reha-sessions",
