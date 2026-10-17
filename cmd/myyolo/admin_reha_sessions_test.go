@@ -80,7 +80,7 @@ func TestAdminRehaRangesCLIAndMissingCoverage(t *testing.T) {
 	if strings.Contains(output.String(), "synthetic-private-native-id") {
 		t.Fatal("raw ID leak")
 	}
-	args[6] = "2026-09-13"
+	args[5] = "2026-09-13"
 	output.Reset()
 	if err := runCLI(ctx, args, strings.NewReader(""), &output); err == nil || output.Len() != 0 {
 		t.Fatal("missing date became empty chart")
