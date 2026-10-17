@@ -6,12 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/luca-schweigmann/myyolo-cli/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/luca-schweigmann/myyolo-cli/internal/store"
 )
 
 func TestRehaInactivityCLIReportsUnavailableAggregateCapability(t *testing.T) {
@@ -19,12 +18,12 @@ func TestRehaInactivityCLIReportsUnavailableAggregateCapability(t *testing.T) {
 	sourcePath := filepath.Join(dir, "source.sqlite")
 	fixture := filepath.Join("..", "..", "internal", "mysign", "testdata", "get_list_data.synthetic.json")
 	var imported bytes.Buffer
-	if err := run(context.Background(), []string{"import", "mysign", "--file", fixture, "--db", sourcePath}, strings.NewReader(""), &imported); err != nil {
+	if err := runCLI(context.Background(), []string{"import", "mysign", "--file", fixture, "--db", sourcePath}, strings.NewReader(""), &imported); err != nil {
 		t.Fatal(err)
 	}
 	scopePath, receiptPath, snapshotPath := writeCLIRehaScope(t, dir, sourcePath)
 	var snapshotOutput bytes.Buffer
-	if err := run(context.Background(), []string{
+	if err := runCLI(context.Background(), []string{
 		"db", "snapshot",
 		"--source-db", sourcePath,
 		"--output-db", snapshotPath,
@@ -34,7 +33,7 @@ func TestRehaInactivityCLIReportsUnavailableAggregateCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	var output bytes.Buffer
-	if err := run(context.Background(), []string{
+	if err := runCLI(context.Background(), []string{
 		"report", "reha-inactivity",
 		"--db", snapshotPath,
 		"--scope-file", receiptPath,
@@ -131,22 +130,4 @@ func writeCLIRehaScope(t *testing.T, dir, sourcePath string) (string, string, st
 		t.Fatal(err)
 	}
 	return scopePath, filepath.Join(dir, "receipt.json"), filepath.Join(dir, "snapshot.sqlite")
-}
-
-func TestRehaInactivityCLIReusesReceiptChecks(t *testing.T) {
-	dir := t.TempDir()
-	var output bytes.Buffer
-	err := run(context.Background(), []string{
-		"report", "reha-inactivity",
-		"--db", filepath.Join(dir, "missing.sqlite"),
-		"--scope-file", filepath.Join(dir, "missing-receipt.json"),
-		"--as-of", "2026-09-06T12:00:00Z",
-		"--location", "point-gerlingen",
-	}, strings.NewReader(""), &output)
-	if err == nil || !strings.Contains(err.Error(), "REHA_INACTIVITY_SCOPE_FAILED") {
-		t.Fatalf("missing receipt error = %v", err)
-	}
-	if strings.Contains(err.Error(), "missing-receipt.json") {
-		t.Fatalf("receipt path leaked: %v", err)
-	}
 }

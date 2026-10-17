@@ -6,20 +6,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/luca-schweigmann/myyolo-cli/internal/admin"
+	"github.com/luca-schweigmann/myyolo-cli/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/luca-schweigmann/myyolo-cli/internal/admin"
-	"github.com/luca-schweigmann/myyolo-cli/internal/store"
 )
 
 func TestPrescriptionMetricCLIUsesHashBoundContext(t *testing.T) {
 	dbPath, receiptPath := prescriptionSummaryFixture(t, false)
 	var stdout bytes.Buffer
-	err := run(
+	err := runCLI(
 		context.Background(),
 		[]string{
 			"report", "prescription-metric",
@@ -49,28 +48,28 @@ func TestPrescriptionMetricCLIUsesHashBoundContext(t *testing.T) {
 			t.Fatalf("CLI output contains private source value %q", privateValue)
 		}
 	}
-}
 
-func TestPrescriptionMetricCLIRejectsMismatchedContext(t *testing.T) {
-	dbPath, receiptPath := prescriptionSummaryFixture(t, true)
-	var stdout bytes.Buffer
-	err := run(
-		context.Background(),
-		[]string{
-			"report", "prescription-metric",
-			"--db", dbPath,
-			"--capability", "reha-prescription-summary",
-			"--context-file", receiptPath,
-			"--format", "json",
-		},
-		strings.NewReader(""),
-		&stdout,
-	)
-	if err == nil || !strings.Contains(err.Error(), "PRESCRIPTION_CONTEXT_FAILED") {
-		t.Fatalf("expected context mismatch, got %v", err)
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("mismatched context wrote output: %q", stdout.String())
+	{
+		dbPath, receiptPath := prescriptionSummaryFixture(t, true)
+		var stdout bytes.Buffer
+		err := runCLI(
+			context.Background(),
+			[]string{
+				"report", "prescription-metric",
+				"--db", dbPath,
+				"--capability", "reha-prescription-summary",
+				"--context-file", receiptPath,
+				"--format", "json",
+			},
+			strings.NewReader(""),
+			&stdout,
+		)
+		if err == nil || !strings.Contains(err.Error(), "PRESCRIPTION_CONTEXT_FAILED") {
+			t.Fatalf("expected context mismatch, got %v", err)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("mismatched context wrote output: %q", stdout.String())
+		}
 	}
 }
 

@@ -58,12 +58,6 @@ func WithDelay(delay time.Duration) Option {
 	}
 }
 
-func WithSleeper(sleeper func(context.Context, time.Duration) error) Option {
-	return func(client *Client) {
-		client.sleep = sleeper
-	}
-}
-
 func New(httpClient *http.Client, options ...Option) (*Client, error) {
 	baseURL, err := url.Parse(DefaultBaseURL)
 	if err != nil {

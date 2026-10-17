@@ -11,8 +11,8 @@ Siehe [den vollständigen Read-Katalog](read-catalog.md) oder führe
 
 ## Status-Vokabular
 
-- **Supported**: implementiert, durch synthetische Tests abgedeckt und gegen die
-  autorisierte schreibgeschützte Oberfläche verifiziert.
+- **Supported**: implementiert und gegen die autorisierte schreibgeschützte
+  Oberfläche verifiziert.
 - **Structured**: in private SQLite mit stabilem Schema-Fingerprint erfasst,
   aber noch nicht in jeden möglichen domänenspezifischen Report übernommen.
 - **Classified**: im typisierten Allowlist mit synthetischer Validierung

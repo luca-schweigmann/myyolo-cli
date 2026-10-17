@@ -27,7 +27,7 @@ func TestAdminRehaSessionsCLIExportsNativeManagementFacts(t *testing.T) {
 	}
 	db.Close()
 	var output bytes.Buffer
-	if err := run(ctx, []string{"report", "admin-reha-sessions", "--db", path, "--from", "2026-09-14", "--to", "2026-09-14", "--as-of", "2026-09-16T08:00:00Z"}, strings.NewReader(""), &output); err != nil {
+	if err := runCLI(ctx, []string{"report", "admin-reha-sessions", "--db", path, "--from", "2026-09-14", "--to", "2026-09-14", "--as-of", "2026-09-16T08:00:00Z"}, strings.NewReader(""), &output); err != nil {
 		t.Fatal(err)
 	}
 	var report store.AdminRehaSessionReport
@@ -70,7 +70,7 @@ func TestAdminRehaRangesCLIAndMissingCoverage(t *testing.T) {
 	db.Close()
 	var output bytes.Buffer
 	args := []string{"report", "admin-reha-ranges", "--db", path, "--from", "2026-09-14", "--to", "2026-09-14", "--as-of", "2026-09-16T08:00:00Z"}
-	if err := run(ctx, args, strings.NewReader(""), &output); err != nil {
+	if err := runCLI(ctx, args, strings.NewReader(""), &output); err != nil {
 		t.Fatal(err)
 	}
 	var report store.AdminRehaRangeReport
@@ -80,9 +80,9 @@ func TestAdminRehaRangesCLIAndMissingCoverage(t *testing.T) {
 	if strings.Contains(output.String(), "synthetic-private-native-id") {
 		t.Fatal("raw ID leak")
 	}
-	args[6] = "2026-09-13"
+	args[5] = "2026-09-13"
 	output.Reset()
-	if err := run(ctx, args, strings.NewReader(""), &output); err == nil || output.Len() != 0 {
+	if err := runCLI(ctx, args, strings.NewReader(""), &output); err == nil || output.Len() != 0 {
 		t.Fatal("missing date became empty chart")
 	}
 }

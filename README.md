@@ -817,19 +817,17 @@ Mitgliederexporte an ein Issue.
 
 ```bash
 make format  # Go-Quellcode formatieren
-make test    # Testsuite mit Race-Erkennung
+make test    # CLI-Flowtests
 make check   # Format-, Modul-, Vet-, Race- und Build-Prüfungen
 make build   # lokale Binärdatei unter bin/myyolo
 ```
 
-Die Tests decken striktes JSON- und HTML-Parsing, Migration und Idempotenz,
-Auswahl des neuesten Snapshots, typisierte Funktionsfilter, Redaktionen im
-Trockenlauf, Freigaben für personenbezogene, gesundheitliche und finanzielle Daten,
-reproduzierbare No-Show-Grenzen, Dateirechte, Ausgabeformate, getrennte
-Schlüsselbundsitzungen, exakte Routen-Allowlisten, Abstände und Budgets,
-Abbrüche bei Rate Limits und CAPTCHA, Größen- und Inhaltstypgrenzen,
-Schemaänderungen, gespeicherte Sitzungen und den genau einmaligen erneuten Login
-ab.
+Die Tests prüfen je einen Offline-Nutzerflow über die gebaute CLI
+und temporäre SQLite-Datenbanken: Import und Reports, Katalog, Sammlungs-
+Trockenlauf, Datenbankstatus, Reha-Snapshot und Terminreport, Historie,
+Inaktivitätsstatus, Admin-Termine und -Zeiträume sowie Verordnungskennzahlen.
+Die Fixtures sind synthetisch; Tests benötigen weder Zugangsdaten noch
+Live-Zugriffe. Anmeldung und Remote-Synchronisation haben noch keinen E2E-Test.
 
 Die CI führt dieselben Qualitätsprüfungen plus `govulncheck` aus. Getaggte
 `v*`-Pushes bauen mit GoReleaser Archive samt Prüfsummen für macOS, Linux und

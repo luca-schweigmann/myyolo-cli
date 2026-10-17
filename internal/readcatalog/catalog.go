@@ -93,13 +93,6 @@ func enumQuery(name, remote string, required bool, allowed ...string) Parameter 
 	}
 }
 
-func enumForm(name, remote string, required bool, allowed ...string) Parameter {
-	return Parameter{
-		Name: name, Remote: remote, Location: Form, Kind: Enum,
-		Required: required, Allowed: allowed,
-	}
-}
-
 func cap(
 	name, group, description, method, path string,
 	sensitivity Sensitivity,

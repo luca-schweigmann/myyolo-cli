@@ -62,10 +62,6 @@ func NewKeyringStore() *Store {
 	return &Store{backend: keyringBackend{}}
 }
 
-func NewStore(backend Backend) *Store {
-	return &Store{backend: backend}
-}
-
 func ValidateProfile(profile string) error {
 	if !profilePattern.MatchString(profile) {
 		return fmt.Errorf("invalid profile name %q", profile)
@@ -113,10 +109,6 @@ func ValidateCredentials(credentials Credentials) error {
 	return nil
 }
 
-func (store *Store) SaveSession(profile string, session Session) error {
-	return store.SaveMySignSession(profile, session)
-}
-
 func (store *Store) SaveMySignSession(profile string, session Session) error {
 	if err := ValidateProfile(profile); err != nil {
 		return err
@@ -125,10 +117,6 @@ func (store *Store) SaveMySignSession(profile string, session Session) error {
 		return errors.New("session token is required")
 	}
 	return store.save(account(profile, "session/mysign"), session)
-}
-
-func (store *Store) LoadSession(profile string) (Session, error) {
-	return store.LoadMySignSession(profile)
 }
 
 func (store *Store) LoadMySignSession(profile string) (Session, error) {
