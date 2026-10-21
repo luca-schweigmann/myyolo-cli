@@ -1,8 +1,8 @@
 name: CI
 
+# Hosted CI only by hand (Luca 21.10.: GitHub-Minutenkontingent).
 on:
-  pull_request:
-    paths-ignore: ['**/*.md', 'docs/**']
+  workflow_dispatch:
 
 permissions:
   contents: read
