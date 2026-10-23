@@ -41,11 +41,35 @@ func (store *ReadOnlyStore) PrescriptionMetric(
 	ctx context.Context,
 	capability string,
 ) (PrescriptionMetric, error) {
-	if store == nil || store.db == nil {
-		return PrescriptionMetric{}, errors.New("read-only database is not open")
-	}
 	if capability != "reha-prescriptions" && capability != "reha-prescription-summary" {
 		return PrescriptionMetric{}, fmt.Errorf("unsupported prescription metric capability %q", capability)
+	}
+	page, rowCounts, observedAt, fingerprint, err := store.capabilityPage(ctx, capability)
+	if err != nil {
+		return PrescriptionMetric{}, err
+	}
+	if err := validatePrescriptionTableReconstruction(capability, page.Tables, rowCounts); err != nil {
+		return PrescriptionMetric{}, err
+	}
+	aggregate, err := admin.AggregatePrescriptionPage(page)
+	if err != nil {
+		return PrescriptionMetric{}, err
+	}
+	return PrescriptionMetric{
+		PrescriptionAggregate: aggregate,
+		ObservedAt:            observedAt,
+		SchemaFingerprint:     fingerprint,
+	}, nil
+}
+
+// capabilityPage rebuilds the stored tables of the latest observation of one
+// collected capability. A capability that was never collected wraps sql.ErrNoRows.
+func (store *ReadOnlyStore) capabilityPage(
+	ctx context.Context,
+	capability string,
+) (admin.Page, []int, string, string, error) {
+	if store == nil || store.db == nil {
+		return admin.Page{}, nil, "", "", errors.New("read-only database is not open")
 	}
 	route := readcatalog.RouteKey(capability)
 
@@ -54,15 +78,15 @@ func (store *ReadOnlyStore) PrescriptionMetric(
 		SELECT table_headers_json, table_rows_json, last_observed_at, schema_fingerprint
 		FROM admin_capabilities WHERE route=?`, route,
 	).Scan(&encodedHeaders, &encodedRowCounts, &observedAt, &fingerprint); err != nil {
-		return PrescriptionMetric{}, fmt.Errorf("read prescription capability metadata: %w", err)
+		return admin.Page{}, nil, "", "", fmt.Errorf("read prescription capability metadata: %w", err)
 	}
 	var headers [][]string
 	if err := json.Unmarshal([]byte(encodedHeaders), &headers); err != nil {
-		return PrescriptionMetric{}, errors.New("decode prescription capability headers")
+		return admin.Page{}, nil, "", "", errors.New("decode prescription capability headers")
 	}
 	var rowCounts []int
 	if err := json.Unmarshal([]byte(encodedRowCounts), &rowCounts); err != nil || len(rowCounts) != len(headers) {
-		return PrescriptionMetric{}, errors.New("decode prescription capability row counts")
+		return admin.Page{}, nil, "", "", errors.New("decode prescription capability row counts")
 	}
 	page := admin.Page{Metadata: admin.PageMetadata{Route: route}}
 	page.Tables = make([]admin.Table, len(headers))
@@ -76,43 +100,31 @@ func (store *ReadOnlyStore) PrescriptionMetric(
 			WHERE route=? AND table_index=? AND last_observed_at=?
 			ORDER BY record_hash`, route, index, observedAt)
 		if err != nil {
-			return PrescriptionMetric{}, fmt.Errorf("read prescription capability rows: %w", err)
+			return admin.Page{}, nil, "", "", fmt.Errorf("read prescription capability rows: %w", err)
 		}
 		for rows.Next() {
 			var encoded string
 			if err := rows.Scan(&encoded); err != nil {
 				_ = rows.Close()
-				return PrescriptionMetric{}, errors.New("scan prescription capability row")
+				return admin.Page{}, nil, "", "", errors.New("scan prescription capability row")
 			}
 			row, err := restoreAdminRow(headers[index], encoded)
 			if err != nil {
 				_ = rows.Close()
-				return PrescriptionMetric{}, err
+				return admin.Page{}, nil, "", "", err
 			}
 			page.Tables[index].Rows = append(page.Tables[index].Rows, row)
 		}
 		rowErr := rows.Err()
 		closeErr := rows.Close()
 		if rowErr != nil {
-			return PrescriptionMetric{}, errors.New("read prescription capability rows")
+			return admin.Page{}, nil, "", "", errors.New("read prescription capability rows")
 		}
 		if closeErr != nil {
-			return PrescriptionMetric{}, errors.New("close prescription capability rows")
+			return admin.Page{}, nil, "", "", errors.New("close prescription capability rows")
 		}
 	}
-	if err := validatePrescriptionTableReconstruction(capability, page.Tables, rowCounts); err != nil {
-		return PrescriptionMetric{}, err
-	}
-
-	aggregate, err := admin.AggregatePrescriptionPage(page)
-	if err != nil {
-		return PrescriptionMetric{}, err
-	}
-	return PrescriptionMetric{
-		PrescriptionAggregate: aggregate,
-		ObservedAt:            observedAt,
-		SchemaFingerprint:     fingerprint,
-	}, nil
+	return page, rowCounts, observedAt, fingerprint, nil
 }
 
 func validatePrescriptionTableReconstruction(

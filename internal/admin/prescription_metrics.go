@@ -42,35 +42,16 @@ func AggregatePrescriptionPage(page Page) (PrescriptionAggregate, error) {
 }
 
 func aggregateActiveRehaPrescriptions(page Page) (PrescriptionAggregate, error) {
-	table, err := exactHeaderTable(page.Tables, []string{
-		"Nr.", "M-Nr.:", "Name", "Vorname", "Anzahl", "Besuche", "Termine", "AG", "",
-	})
+	ids, skipped, err := ActiveRehaPrescriptionIDs(page)
 	if err != nil {
-		return PrescriptionAggregate{}, fmt.Errorf("active Reha prescriptions: %w", err)
+		return PrescriptionAggregate{}, err
 	}
-
-	seen := make(map[string]struct{})
-	counted := 0
-	skipped := 0
-	for _, row := range table.Rows {
-		if len(row) != len(table.Headers) || strings.TrimSpace(row[0]) == "" || strings.TrimSpace(row[1]) == "" {
-			skipped++
-			continue
-		}
-		prescriptionID := strings.TrimSpace(row[0])
-		if _, duplicate := seen[prescriptionID]; duplicate {
-			return PrescriptionAggregate{}, errors.New("duplicate prescription identifier")
-		}
-		seen[prescriptionID] = struct{}{}
-		counted++
-	}
-
 	return PrescriptionAggregate{
 		Capability:  activeRehaPrescriptionsRoute,
 		Metric:      "active_reha_prescriptions",
 		Unit:        "prescription_rows",
-		Count:       counted,
-		CountedRows: counted,
+		Count:       len(ids),
+		CountedRows: len(ids),
 		SkippedRows: skipped,
 		Coverage:    "schema_matched_rows_only",
 	}, nil

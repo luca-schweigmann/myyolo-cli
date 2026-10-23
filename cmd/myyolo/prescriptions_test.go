@@ -147,3 +147,87 @@ func prescriptionSummaryFixture(t *testing.T, mismatchedHash bool) (string, stri
 	}
 	return dbPath, receiptPath
 }
+
+func TestPrescriptionObservationExportsOnlyHashes(t *testing.T) {
+	activeHeaders := []string{"Nr.", "M-Nr.:", "Name", "Vorname", "Anzahl", "Besuche", "Termine", "AG", ""}
+	archivedHeaders := []string{"Nr.", "M-Nr.:", "Name", "Vorname", "Ende"}
+	activePage := admin.Page{
+		Metadata: admin.PageMetadata{
+			Route:        "capability:reha-prescriptions",
+			TableHeaders: [][]string{activeHeaders},
+			TableRows:    []int{2},
+			Fingerprint:  strings.Repeat("a", 64),
+		},
+		Tables: []admin.Table{{Headers: activeHeaders, Rows: [][]string{
+			{"9001", "M-77", "Mustermann", "Erika", "12", "3", "9", "", ""},
+			{"9002", "M-78", "Beispiel", "Max", "12", "5", "7", "", ""},
+		}}},
+	}
+	archivedPage := func(headers []string, rows [][]string) admin.Page {
+		return admin.Page{
+			Metadata: admin.PageMetadata{
+				Route:        "capability:reha-prescriptions-archived",
+				TableHeaders: [][]string{headers},
+				TableRows:    []int{len(rows)},
+				Fingerprint:  strings.Repeat("b", 64),
+			},
+			Tables: []admin.Table{{Headers: headers, Rows: rows}},
+		}
+	}
+	observe := func(pages ...admin.Page) (prescriptionObservationFixture, string) {
+		dbPath := filepath.Join(t.TempDir(), "observation.sqlite")
+		db, err := store.Open(context.Background(), dbPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, page := range pages {
+			if _, err := db.ImportAdminPage(context.Background(), page); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
+		var stdout bytes.Buffer
+		err = runCLI(context.Background(),
+			[]string{"report", "prescription-observation", "--db", dbPath},
+			strings.NewReader(""), &stdout)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got prescriptionObservationFixture
+		if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		return got, stdout.String()
+	}
+
+	got, raw := observe(activePage, archivedPage(archivedHeaders, [][]string{
+		{"8001", "M-10", "Alt", "Anna", "01.09.2026"},
+	}))
+	if got.Active.Status != "ok" || got.Active.CountedRows != 2 || len(got.Active.Hashes) != 2 ||
+		got.Archived.Status != "ok" || len(got.Archived.Hashes) != 1 {
+		t.Fatalf("unexpected observation: %+v", got)
+	}
+	digest := sha256.Sum256([]byte("myyolo-prescription-v1\x008001"))
+	if got.Archived.Hashes[0] != hex.EncodeToString(digest[:]) {
+		t.Fatalf("archived hash is not the documented scheme: %s", got.Archived.Hashes[0])
+	}
+	for _, private := range []string{"Mustermann", "Erika", "Beispiel", "Alt", "M-77", "9001", "8001"} {
+		if strings.Contains(raw, private) {
+			t.Fatalf("observation leaks %q", private)
+		}
+	}
+
+	if got, _ := observe(activePage); got.Archived.Status != "not_collected" || len(got.Archived.Hashes) != 0 {
+		t.Fatalf("missing archive must be not_collected, got %+v", got.Archived)
+	}
+	if got, _ := observe(activePage, archivedPage([]string{"Name", "Ende"}, [][]string{{"x", "y"}})); got.Archived.Status != "schema_unmatched" {
+		t.Fatalf("unknown archive schema must be schema_unmatched, got %+v", got.Archived)
+	}
+}
+
+type prescriptionObservationFixture struct {
+	Active   store.PrescriptionHashSource `json:"active"`
+	Archived store.PrescriptionHashSource `json:"archived"`
+}

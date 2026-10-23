@@ -36,6 +36,7 @@ Verwendung:
   myyolo report admin-reha-ranges --db PATH --from YYYY-MM-DD --to YYYY-MM-DD [--as-of RFC3339]
   myyolo report admin-reha-sessions --db PATH --from YYYY-MM-DD --to YYYY-MM-DD [--as-of RFC3339]
   myyolo report prescription-metric --db PATH --capability reha-prescriptions|reha-prescription-summary [--context-file PATH] [--format table|json|csv]
+  myyolo report prescription-observation --db PATH
   myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
   myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
   myyolo report capability CAPABILITY [Datenfreigaben] [--format table|json|csv] [--db PATH]
@@ -128,6 +129,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 		}
 		if len(args) >= 2 && args[1] == "prescription-metric" {
 			return printPrescriptionMetric(ctx, args[2:], stdout)
+		}
+		if len(args) >= 2 && args[1] == "prescription-observation" {
+			return printPrescriptionObservation(ctx, args[2:], stdout)
 		}
 		if len(args) >= 3 && args[1] == "capability" {
 			return printCapabilityReport(ctx, args[2], args[3:], stdout)

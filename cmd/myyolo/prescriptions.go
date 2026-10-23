@@ -103,3 +103,28 @@ func printPrescriptionMetric(ctx context.Context, args []string, stdout io.Write
 	}
 	return nil
 }
+
+// printPrescriptionObservation writes the hash sets of the active and the
+// archived prescription lists of one database. It is the input of the monthly
+// prescription ledger; prescription numbers never leave this process unhashed.
+func printPrescriptionObservation(ctx context.Context, args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("report prescription-observation", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	dbPath := flags.String("db", "", "private SQLite database")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || strings.TrimSpace(*dbPath) == "" {
+		return errors.New("PRESCRIPTION_INVALID_ARGUMENTS: --db is required")
+	}
+	db, err := store.OpenReadOnly(ctx, *dbPath)
+	if err != nil {
+		return errors.New("PRESCRIPTION_DATABASE_FAILED: database cannot be opened read-only")
+	}
+	defer db.Close()
+	observation, err := db.PrescriptionObservation(ctx)
+	if err != nil {
+		return errors.New("PRESCRIPTION_REPORT_FAILED: observation cannot be created")
+	}
+	if err := output.Write(stdout, observation, "json"); err != nil {
+		return errors.New("PRESCRIPTION_OUTPUT_FAILED: report cannot be written")
+	}
+	return nil
+}

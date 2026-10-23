@@ -47,6 +47,7 @@ Berechtigung und im Rahmen der Vereinbarung, die für deinen Zugang gilt.
 | Reha-Termine als sichere Aggregate auswerten | `myyolo report reha-sessions` | 0 |
 | Verfügbarkeit einer belastbaren Reha-Inaktivitätskennzahl prüfen | `myyolo report reha-inactivity` | 0 |
 | Verordnungszeilen oder Verordnungsübersicht aggregieren | `myyolo report prescription-metric` | 0 |
+| Hash-Menge der aktiven und archivierten Verordnungen beobachten | `myyolo report prescription-observation` | 0 |
 
 Personenbezogene, gesundheitliche und finanzielle Abfragen sind durch getrennte
 Freigabeschalter geschützt. Eine vollständige Übersicht steht im
@@ -55,6 +56,20 @@ Freigabeschalter geschützt. Eine vollständige Übersicht steht im
 [Datenwörterbuch](docs/data-dictionary.md). Die Verträge für `report reha-history`,
 `admin-reha-sessions` und `admin-reha-ranges` stehen in der
 [Reha-Historie](docs/reha-history.md).
+
+### Verordnungsbeobachtung
+
+`report prescription-observation --db /PRIVATER/SNAPSHOT.sqlite` gibt als JSON je
+Beobachtung die Hash-Menge der Verordnungsnummern (`Nr.`) aus: `active` aus
+`reha-prescriptions` (exakte Kopfzeile, sonst Fehler) und `archived` aus
+`reha-prescriptions-archived`. Der Hash ist SHA-256 über `myyolo-prescription-v1`,
+ein Nullbyte und die Nummer. Namen, Mitgliedsnummern, Ärzte und Diagnosen
+erscheinen nicht. Die Kopfzeile des Archivexports ist noch nicht beobachtet:
+Der Parser verlangt genau eine Tabelle mit genau einer Spalte `Nr.`, sonst
+meldet `archived.status` `schema_unmatched`; ein nie gesammelter Export meldet
+`not_collected`. Die Datenbank hält nur die jeweils letzte Beobachtung, deshalb
+wird die Ausgabe nach jedem Collect-Lauf gesichert; der Diff über Monate
+(neu, beendet, unbekannt) gehört in point-analytics.
 
 ### Lokale Verordnungsaggregate
 
@@ -734,6 +749,7 @@ myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to Y
 myyolo report reha-history --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--schema-version v1|v2]
 myyolo report reha-inactivity --db PATH --scope-file PATH --as-of RFC3339 --location KEY
 myyolo report prescription-metric --db PATH --capability reha-prescriptions|reha-prescription-summary [--context-file PATH] [--format table|json|csv]
+myyolo report prescription-observation --db PATH
 myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
 myyolo report admin-reha-ranges|admin-reha-sessions --db PATH --from YYYY-MM-DD --to YYYY-MM-DD [--as-of RFC3339]
 myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
