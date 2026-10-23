@@ -13,6 +13,11 @@ import (
 	"time"
 )
 
+// ErrPrescriptionKeyCollision: two active Reha prescriptions share member
+// number and end date. They cannot be told apart from night to night, and
+// merging them would undercount the stock, so the observation fails instead.
+var ErrPrescriptionKeyCollision = errors.New("two active prescriptions share member number and end date")
+
 // remainingUnitsHeaders is the observed header row of the statistic
 // "Resttermine" (capability prescription-remaining-units).
 var remainingUnitsHeaders = []string{
@@ -98,7 +103,7 @@ func ObservePrescriptions(page Page, key []byte) (PrescriptionObservation, error
 			Ende:         ende,
 		}
 		if _, duplicate := seen[state.Key]; duplicate {
-			return PrescriptionObservation{}, errors.New("remaining units: member and end date are not unique")
+			return PrescriptionObservation{}, ErrPrescriptionKeyCollision
 		}
 		seen[state.Key] = struct{}{}
 		observation.Rows = append(observation.Rows, state)

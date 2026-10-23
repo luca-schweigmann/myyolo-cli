@@ -77,7 +77,9 @@ mindestens 32 Byte) über `Mitglieds-Nr.|Ende`; `key_id` erkennt einen anderen
 Schlüssel, ohne ihn zu verraten. Namen, Mitgliedsnummern und die zweite Spalte
 `Termine` erscheinen nicht. Der Report bricht ab bei anderer Schwelle als 999,
 abweichender Kopfzeile, verlorenen Zeilen, `Rest ≠ Termine − wahrgenommen`,
-ungültigem Datum oder doppeltem Schlüssel. Zeilen anderer `Art` als „Reha“ zählt
+ungültigem Datum oder zwei Verordnungen mit gleicher Mitglieds-Nr. und gleichem Ende
+(`PRESCRIPTION_KEY_COLLISION`: nicht unterscheidbar, Zusammenführen würde den Bestand
+verfälschen). Zeilen anderer `Art` als „Reha“ zählt
 `other_art_rows`. Welcher Standort gilt, entscheidet der Aufrufer.
 
 ### Lokale Verordnungsaggregate

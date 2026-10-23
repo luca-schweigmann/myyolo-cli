@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/luca-schweigmann/myyolo-cli/internal/admin"
 	"github.com/luca-schweigmann/myyolo-cli/internal/output"
 	"github.com/luca-schweigmann/myyolo-cli/internal/store"
 )
@@ -129,6 +130,9 @@ func printPrescriptionObservation(ctx context.Context, args []string, stdout io.
 	}
 	defer db.Close()
 	observation, err := db.PrescriptionObservation(ctx, key)
+	if errors.Is(err, admin.ErrPrescriptionKeyCollision) {
+		return fmt.Errorf("PRESCRIPTION_KEY_COLLISION: %v", err)
+	}
 	if err != nil {
 		return fmt.Errorf("PRESCRIPTION_REPORT_FAILED: %v", err)
 	}

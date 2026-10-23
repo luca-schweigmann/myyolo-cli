@@ -237,6 +237,11 @@ func TestPrescriptionObservationKeysRemainingUnits(t *testing.T) {
 			t.Fatalf("%s must fail closed, got %v %q", name, err, raw)
 		}
 	}
+	twin := []string{"3", "4711", "Mustermann", "Erika", "Reha", "10", "1", "9", "2", "30.11.2026", ""}
+	if _, raw, err := observe(page("70839 Gerlingen", "Menge=999", append(rows, twin)...), keyPath); err == nil ||
+		!strings.Contains(err.Error(), "PRESCRIPTION_KEY_COLLISION") || raw != "" {
+		t.Fatalf("same member and end date must fail with its own code, got %v %q", err, raw)
+	}
 	if got, _, err := observe(page("rehavital e.v. 71254 Ditzingen", "Menge=999", rows...), keyPath); err != nil || got.Location != "71254 Ditzingen" {
 		t.Fatalf("a foreign location is reported as it is for the caller to reject, got %v %+v", err, got.Location)
 	}
