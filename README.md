@@ -47,6 +47,7 @@ Berechtigung und im Rahmen der Vereinbarung, die für deinen Zugang gilt.
 | Reha-Termine als sichere Aggregate auswerten | `myyolo report reha-sessions` | 0 |
 | Verfügbarkeit einer belastbaren Reha-Inaktivitätskennzahl prüfen | `myyolo report reha-inactivity` | 0 |
 | Verordnungszeilen oder Verordnungsübersicht aggregieren | `myyolo report prescription-metric` | 0 |
+| Einheitenstand aller aktiven Verordnungen beobachten | `myyolo report prescription-observation` | 0 |
 
 Personenbezogene, gesundheitliche und finanzielle Abfragen sind durch getrennte
 Freigabeschalter geschützt. Eine vollständige Übersicht steht im
@@ -55,6 +56,31 @@ Freigabeschalter geschützt. Eine vollständige Übersicht steht im
 [Datenwörterbuch](docs/data-dictionary.md). Die Verträge für `report reha-history`,
 `admin-reha-sessions` und `admin-reha-ranges` stehen in der
 [Reha-Historie](docs/reha-history.md).
+
+### Verordnungsbeobachtung
+
+Die Statistik „Resttermine“ mit Schwelle 999 listet alle aktiven Verordnungen
+in einem Abruf, nicht paginiert:
+
+```bash
+myyolo collect prescription-remaining-units --threshold 999 \
+  --include-personal-data --include-health-data --db /PRIVAT/nacht.sqlite
+myyolo report prescription-observation --db /PRIVAT/nacht.sqlite --key-file /PRIVAT/schluessel
+```
+
+Der Report liest die letzte gesammelte Statistik und gibt als JSON aus: `location`
+(Postleitzahl und Ort aus dem Seitenkopf des Betreibers; fehlt er oder ist er
+nicht eindeutig, bricht der Report ab), `observed_at`, `key_id` und je Reha-
+Verordnung `vo_key`, `termine`, `wahrgenommen`, `rest`, `ende` (ISO-Datum).
+`vo_key` ist HMAC-SHA256 mit dem Schlüssel aus `--key-file` (absolute 0600-Datei,
+mindestens 32 Byte) über `Mitglieds-Nr.|Ende`; `key_id` erkennt einen anderen
+Schlüssel, ohne ihn zu verraten. Namen, Mitgliedsnummern und die zweite Spalte
+`Termine` erscheinen nicht. Der Report bricht ab bei anderer Schwelle als 999,
+abweichender Kopfzeile, verlorenen Zeilen, `Rest ≠ Termine − wahrgenommen`,
+ungültigem Datum oder zwei Verordnungen mit gleicher Mitglieds-Nr. und gleichem Ende
+(`PRESCRIPTION_KEY_COLLISION`: nicht unterscheidbar, Zusammenführen würde den Bestand
+verfälschen). Zeilen anderer `Art` als „Reha“ zählt
+`other_art_rows`. Welcher Standort gilt, entscheidet der Aufrufer.
 
 ### Lokale Verordnungsaggregate
 
@@ -734,6 +760,7 @@ myyolo report reha-sessions --db PATH --scope-file PATH --from YYYY-MM-DD --to Y
 myyolo report reha-history --db PATH --scope-file PATH --from YYYY-MM-DD --to YYYY-MM-DD --location KEY [--as-of RFC3339] [--schema-version v1|v2]
 myyolo report reha-inactivity --db PATH --scope-file PATH --as-of RFC3339 --location KEY
 myyolo report prescription-metric --db PATH --capability reha-prescriptions|reha-prescription-summary [--context-file PATH] [--format table|json|csv]
+myyolo report prescription-observation --db PATH --key-file PATH
 myyolo report members --include-personal-data [--as-of RFC3339] [--format table|json|csv] [--db PATH]
 myyolo report admin-reha-ranges|admin-reha-sessions --db PATH --from YYYY-MM-DD --to YYYY-MM-DD [--as-of RFC3339]
 myyolo report admin-capabilities|admin-reha-hours|admin-course-months|admin-missing-signatures [--format table|json|csv] [--db PATH]
