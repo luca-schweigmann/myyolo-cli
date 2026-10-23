@@ -62,12 +62,15 @@ Freigabeschalter geschützt. Eine vollständige Übersicht steht im
 `report prescription-observation --db /PRIVATER/SNAPSHOT.sqlite` gibt als JSON je
 Beobachtung die Hash-Menge der Verordnungsnummern (`Nr.`) aus: `active` aus
 `reha-prescriptions` (exakte Kopfzeile, sonst Fehler) und `archived` aus
-`reha-prescriptions-archived`. Der Hash ist SHA-256 über `myyolo-prescription-v1`,
-ein Nullbyte und die Nummer. Namen, Mitgliedsnummern, Ärzte und Diagnosen
+`reha-prescriptions-archived`. Der Hash ist ein Pseudonym ohne Geheimnis: SHA-256
+über `myyolo-prescription-v1`, ein Nullbyte und die Nummer. Er schützt nicht gegen
+Durchprobieren und bleibt in lokalen 0600-Dateien. Namen, Mitgliedsnummern, Ärzte und Diagnosen
 erscheinen nicht. Die Kopfzeile des Archivexports ist noch nicht beobachtet:
 Der Parser verlangt genau eine Tabelle mit genau einer Spalte `Nr.`, sonst
 meldet `archived.status` `schema_unmatched`; ein nie gesammelter Export meldet
-`not_collected`. Die Datenbank hält nur die jeweils letzte Beobachtung, deshalb
+`not_collected`. Der Archivexport „Abgelaufene und gelöschte“ enthält auch
+gelöschte Fehleinträge; sie gelten vorerst als beendet (Annahme bis zu Simons Definition).
+Zeilen ohne `Nr.` erscheinen als `skipped_rows`; der Leser behandelt die Nacht dann als unvollständig. Die Datenbank hält nur die jeweils letzte Beobachtung, deshalb
 wird die Ausgabe nach jedem Collect-Lauf gesichert; der Diff über Monate
 (neu, beendet, unbekannt) gehört in point-analytics.
 
