@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -146,4 +147,103 @@ func prescriptionSummaryFixture(t *testing.T, mismatchedHash bool) (string, stri
 		t.Fatal(err)
 	}
 	return dbPath, receiptPath
+}
+
+// Flow: a collected "Resttermine" statistic becomes keyed unit states; no
+// name or member number leaves the CLI, and a foreign or unclear operator
+// location, a lower threshold or a weak key file fail closed.
+func TestPrescriptionObservationKeysRemainingUnits(t *testing.T) {
+	headers := []string{"", "Nr.:", "Name", "Vorname", "Art", "Termine", "wahrgenommen", "Rest", "Termine", "Ende", ""}
+	page := func(operator, body string, rows ...[]string) admin.Page {
+		return admin.Page{
+			Metadata: admin.PageMetadata{
+				Route:        "capability:prescription-remaining-units",
+				TableHeaders: [][]string{nil, headers},
+				TableRows:    []int{1, len(rows)},
+				Fingerprint:  strings.Repeat("c", 64),
+			},
+			Tables: []admin.Table{
+				{Rows: [][]string{{"", "Benutzer: Test Person", operator}}},
+				{Headers: headers, Rows: rows},
+			},
+			RequestPath: "/Statistiken/Verordnungen/Verordnung_Personen_Rest_Termine.asp",
+			RequestBody: body,
+		}
+	}
+	rows := [][]string{
+		{"1", "4711", "Mustermann", "Erika", "Reha", "18", "16", "2", "5", "30.11.2026", "Details"},
+		{"2", "815", "Beispiel", "Max", "Reha", "50", "0", "50", "12", "15.10.2029", "Details"},
+	}
+	directory := t.TempDir()
+	keyPath := filepath.Join(directory, "key")
+	key := []byte(strings.Repeat("k", 32))
+	if err := os.WriteFile(keyPath, key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	observe := func(page admin.Page, keyFile string) (store.PrescriptionObservation, string, error) {
+		dbPath := filepath.Join(t.TempDir(), "observation.sqlite")
+		db, err := store.Open(context.Background(), dbPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ImportAdminPage(context.Background(), page); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
+		var stdout bytes.Buffer
+		err = runCLI(context.Background(),
+			[]string{"report", "prescription-observation", "--db", dbPath, "--key-file", keyFile},
+			strings.NewReader(""), &stdout)
+		var got store.PrescriptionObservation
+		if err == nil {
+			if decodeErr := json.Unmarshal(stdout.Bytes(), &got); decodeErr != nil {
+				t.Fatal(decodeErr)
+			}
+		}
+		return got, stdout.String(), err
+	}
+
+	got, raw, err := observe(page("rehavital e.v. JA Sport Gerlingen 70839 Gerlingen", "Menge=999", rows...), keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte("4711|2026-11-30"))
+	want := admin.PrescriptionState{Key: hex.EncodeToString(mac.Sum(nil)), Termine: 18, Wahrgenommen: 16, Rest: 2, Ende: "2026-11-30"}
+	if got.Location != "70839 Gerlingen" || len(got.Rows) != 2 || got.KeyID != admin.KeyID(key) {
+		t.Fatalf("unexpected observation: %+v", got)
+	}
+	found := false
+	for _, row := range got.Rows {
+		found = found || row == want
+	}
+	if !found {
+		t.Fatalf("row is not HMAC(member|end) with its unit counts: %+v", got.Rows)
+	}
+	for _, private := range []string{"Mustermann", "Erika", "Beispiel", "4711", "815", "Test Person"} {
+		if strings.Contains(raw, private) {
+			t.Fatalf("observation leaks %q", private)
+		}
+	}
+
+	for name, failing := range map[string]admin.Page{
+		"no location":  page("rehavital e.v.", "Menge=999", rows...),
+		"threshold 10": page("rehavital e.v. 70839 Gerlingen", "Menge=10", rows...),
+		"rest drift":   page("rehavital e.v. 70839 Gerlingen", "Menge=999", []string{"1", "9", "A", "B", "Reha", "18", "16", "3", "5", "30.11.2026", ""}),
+	} {
+		if _, raw, err := observe(failing, keyPath); err == nil || raw != "" {
+			t.Fatalf("%s must fail closed, got %v %q", name, err, raw)
+		}
+	}
+	if got, _, err := observe(page("rehavital e.v. 71254 Ditzingen", "Menge=999", rows...), keyPath); err != nil || got.Location != "71254 Ditzingen" {
+		t.Fatalf("a foreign location is reported as it is for the caller to reject, got %v %+v", err, got.Location)
+	}
+	if err := os.Chmod(keyPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := observe(page("70839 Gerlingen", "Menge=999", rows...), keyPath); err == nil || !strings.Contains(err.Error(), "PRESCRIPTION_KEY_FAILED") {
+		t.Fatalf("a readable key file must be rejected, got %v", err)
+	}
 }
